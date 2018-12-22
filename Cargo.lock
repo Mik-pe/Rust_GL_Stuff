@@ -541,7 +541,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustSDL"
+name = "rust_sdl_mikpe"
 version = "0.1.0"
 dependencies = [
  "glium 0.22.0 (registry+https://github.com/rust-lang/crates.io-index)",

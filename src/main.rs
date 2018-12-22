@@ -3,6 +3,8 @@ extern crate glium;
 extern crate notify;
 
 mod renderer;
+mod math;
+use renderer::*;
 use glium::index::PrimitiveType;
 use glium::{glutin, Surface};
 use std::env;
@@ -26,6 +28,21 @@ fn watch(path: std::path::PathBuf, sender: std::sync::mpsc::Sender<notify::Debou
 }
 
 fn main() {
+  let some_vec = math::Vec3{x : 0.0,
+  y : 1.0,
+  z : 2.0,
+  };
+  let some_other_vec = math::Vec3{x : 0.0,
+  y : 1.0,
+  z : 2.0,
+  };
+  let some_third_vec = some_vec.add(some_other_vec);
+
+  let some_mat4 = math::Mat4::identity();
+  let some_other_mat4 = math::Mat4::identity();
+  let third_mat4 = some_mat4.mul(some_other_mat4);
+  println!("{:?}", some_third_vec );
+  println!("{:?}", third_mat4 );
   let mut events_loop = glutin::EventsLoop::new();
   let window = glutin::WindowBuilder::new()
     .with_title("mikpe_demo")
@@ -38,12 +55,12 @@ fn main() {
   let mut current_path = env::current_exe().unwrap();
 
   current_path.pop();
-  let path = current_path.join("../../shaders");
-  let mut shader_list: Vec<renderer::shading::Shader> = Vec::new();
+  let path = current_path.join("../../assets/shaders");
+  let mut shader_list: Vec<shading::Shader> = Vec::new();
   if path.is_dir() {
     for entry in path.read_dir().expect("Read path failed!") {
       if let Ok(entry) = entry {
-        let some_shader = renderer::shading::Shader::read(entry.path().clone());
+        let some_shader = shading::Shader::read(entry.path().clone());
         shader_list.push(some_shader);
       }
     }
@@ -53,7 +70,6 @@ fn main() {
     watch(path, tx.clone());
   });
 
-  //TODO: Make shaders hot-reloadable!
   //TODO: make a pass out of this:
   let vertex_buffer = {
     #[derive(Copy, Clone)]
@@ -84,12 +100,14 @@ fn main() {
   let mut frag_shader = String::new();
   for shader in shader_list {
     match shader.shadertype {
-      renderer::shading::ShaderType::Fragment => frag_shader = shader.code.clone(),
-      renderer::shading::ShaderType::Vertex => vert_shader = shader.code.clone(),
+      shading::ShaderType::Fragment => frag_shader = shader.code.clone(),
+      shading::ShaderType::Vertex => vert_shader = shader.code.clone(),
     }
   }
   let mut program = glium::Program::from_source(&display, &vert_shader, &frag_shader, None).unwrap();
-
+  //TODO: structure code in a more sensical manner
+  //TODO: Create better renderer-functions to wrap glutin
+  //TODO: Create some material-structuringish
   
 
   while running {
@@ -115,8 +133,8 @@ fn main() {
           println!("Wrote to path: {:?}", path);
           let some_shader = renderer::shading::Shader::read(path);
           match some_shader.shadertype {
-            renderer::shading::ShaderType::Fragment => frag_shader = some_shader.code.clone(),
-            renderer::shading::ShaderType::Vertex => vert_shader = some_shader.code.clone(),
+            shading::ShaderType::Fragment => frag_shader = some_shader.code.clone(),
+            shading::ShaderType::Vertex => vert_shader = some_shader.code.clone(),
           }
           program = glium::Program::from_source(&display, &vert_shader, &frag_shader, None).unwrap();
         },
@@ -129,6 +147,7 @@ fn main() {
 
     events_loop.poll_events(|event| match event {
       glutin::Event::WindowEvent { event, .. } => match event {
+        glutin::WindowEvent::Touch(touch) => println!("FOOBAR {:?}", touch),
         glutin::WindowEvent::CloseRequested => running = false,
         glutin::WindowEvent::Resized(logical_size) => {
           println!(
