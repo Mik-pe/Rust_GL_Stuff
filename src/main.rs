@@ -28,19 +28,14 @@ fn watch(path: std::path::PathBuf, sender: std::sync::mpsc::Sender<notify::Debou
 }
 
 fn main() {
-  let some_vec = math::Vec3{x : 0.0,
-  y : 1.0,
-  z : 2.0,
-  };
-  let some_other_vec = math::Vec3{x : 0.0,
-  y : 1.0,
-  z : 2.0,
-  };
-  let some_third_vec = some_vec.add(some_other_vec);
+  let some_vec = math::vec3_new(0.0, 1.0, 2.0);
+  let some_other_vec = math::vec3_new(0.0, 1.0, 2.0);
 
-  let some_mat4 = math::Mat4::identity();
-  let some_other_mat4 = math::Mat4::identity();
-  let third_mat4 = some_mat4.mul(some_other_mat4);
+  let some_third_vec = math::vec3_add(some_vec, some_other_vec);
+
+  let some_mat4 = math::mat4_translation([10.0, 5.0, 5.0]);
+  let some_other_mat4 = math::mat4_translation([10.0, 0.0, 5.0]);
+  let third_mat4 = math::mat4_mul(some_mat4, some_other_mat4);
   println!("{:?}", some_third_vec );
   println!("{:?}", third_mat4 );
   let mut events_loop = glutin::EventsLoop::new();
