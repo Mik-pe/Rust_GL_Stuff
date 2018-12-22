@@ -30,14 +30,22 @@ fn watch(path: std::path::PathBuf, sender: std::sync::mpsc::Sender<notify::Debou
 fn main() {
   let some_vec = math::vec3_new(0.0, 1.0, 2.0);
   let some_other_vec = math::vec3_new(0.0, 1.0, 2.0);
-
   let some_third_vec = math::vec3_add(some_vec, some_other_vec);
+
+  let some_vec4 = math::vec4_new(0.0, 1.0, 5.0);
+  let some_quat = math::quat_new();
+
 
   let some_mat4 = math::mat4_translation([10.0, 5.0, 5.0]);
   let some_other_mat4 = math::mat4_translation([10.0, 0.0, 5.0]);
-  let third_mat4 = math::mat4_mul(some_mat4, some_other_mat4);
+  let third_mat4 = math::mat4_mul(&some_mat4, &some_other_mat4);
+
   println!("{:?}", some_third_vec );
   println!("{:?}", third_mat4 );
+  let multiplied_vec = math::mat4_mul_vec3(&third_mat4, &some_third_vec);
+  let multiplied_vec4 = math::mat4_mul_vec4(&third_mat4, &some_vec4);
+  println!("{:?}", multiplied_vec );
+  println!("{:?}", multiplied_vec4 );
   let mut events_loop = glutin::EventsLoop::new();
   let window = glutin::WindowBuilder::new()
     .with_title("mikpe_demo")
