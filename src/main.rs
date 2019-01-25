@@ -30,7 +30,7 @@ fn main() {
     let some_third_vec = some_vec.add(some_other_vec);
 
     let some_vec4 = math::Vec4::from_xyz(0.0, 1.0, 5.0);
-    let some_quat = math::quat_new();
+    let some_quat = math::Quat::new();
 
     let some_mat4 = math::Mat4::from_translation([10.0, 5.0, 5.0]);
     let some_other_mat4 = math::Mat4::from_translation([10.0, 0.0, 5.0]);

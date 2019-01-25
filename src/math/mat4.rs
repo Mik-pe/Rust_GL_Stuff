@@ -53,6 +53,16 @@ impl Mat4 {
         ])
     }
 
+    //Internal functions which makes less sense
+    pub fn extract_row(&self, index: usize) -> Vec4 {
+        Vec4([
+            self[0][index],
+            self[1][index],
+            self[2][index],
+            self[3][index],
+        ])
+    }
+
     pub fn from_rotaxis(angle: f32, axis: [f32; 3]) -> Mat4 {
         let cos_part = angle.cos();
         let sin_part = angle.sin();
@@ -90,10 +100,10 @@ impl Mat4 {
     }
 
     pub fn mul(self, _rhs: &Mat4) -> Mat4 {
-        let row0 = super::extract_row(&self, 0);
-        let row1 = super::extract_row(&self, 1);
-        let row2 = super::extract_row(&self, 2);
-        let row3 = super::extract_row(&self, 3);
+        let row0 = self.extract_row(0);
+        let row1 = self.extract_row(1);
+        let row2 = self.extract_row(2);
+        let row3 = self.extract_row(3);
 
         Mat4([
             Vec4([
