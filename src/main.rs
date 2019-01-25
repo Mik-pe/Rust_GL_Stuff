@@ -1,12 +1,8 @@
-#[macro_use]
-extern crate glium;
-extern crate notify;
-
 mod renderer;
 mod math;
 use renderer::*;
 use glium::index::PrimitiveType;
-use glium::{glutin, Surface};
+use glium::{glutin, Surface, uniform, implement_vertex};
 use std::env;
 
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
@@ -28,17 +24,17 @@ fn watch(path: std::path::PathBuf, sender: std::sync::mpsc::Sender<notify::Debou
 }
 
 fn main() {
-  let some_vec = math::vec3_new(0.0, 1.0, 2.0);
-  let some_other_vec = math::vec3_new(0.0, 1.0, 2.0);
-  let some_third_vec = math::vec3_add(some_vec, some_other_vec);
+  let some_vec = math::Vec3::new(0.0, 1.0, 2.0);
+  let some_other_vec = math::Vec3::new(0.0, 1.0, 2.0);
+  let some_third_vec = some_vec.add(some_other_vec);
 
-  let some_vec4 = math::vec4_new(0.0, 1.0, 5.0);
+  let some_vec4 = math::Vec4::from_xyz(0.0, 1.0, 5.0);
   let some_quat = math::quat_new();
 
 
-  let some_mat4 = math::mat4_translation([10.0, 5.0, 5.0]);
-  let some_other_mat4 = math::mat4_translation([10.0, 0.0, 5.0]);
-  let third_mat4 = math::mat4_mul(&some_mat4, &some_other_mat4);
+  let some_mat4 = math::Mat4::from_translation([10.0, 5.0, 5.0]);
+  let some_other_mat4 = math::Mat4::from_translation([10.0, 0.0, 5.0]);
+  let third_mat4 = some_mat4.mul(&some_other_mat4);
 
   println!("{:?}", some_third_vec );
   println!("{:?}", third_mat4 );
@@ -79,7 +75,7 @@ fn main() {
     struct Vertex {
       position: [f32; 2],
     }
-    implement_vertex!(Vertex, position);
+    glium::implement_vertex!(Vertex, position);
     glium::VertexBuffer::new(
       &display,
       &[
@@ -122,7 +118,7 @@ fn main() {
         &vertex_buffer,
         &index_buffer,
         &program,
-        &uniform!{
+        &glium::uniform!{
           time: begin,
         },
         &Default::default(),

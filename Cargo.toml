@@ -2,6 +2,7 @@
 name = "rust_sdl_mikpe"
 version = "0.1.0"
 authors = ["Magrit <mikael.pettersson201@gmail.com>"]
+edition = "2018"
 
 [dependencies]
 glium = "*"

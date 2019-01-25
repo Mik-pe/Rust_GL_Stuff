@@ -1,4 +1,6 @@
-use super::Vec4;
+#[derive(Debug)]
+pub struct Vec4(pub [f32;4]);
+
 
 impl std::ops::Index<usize> for Vec4 {
   type Output = f32;
@@ -14,8 +16,10 @@ impl std::ops::Index<usize> for Vec4 {
     }
 }
 
-#[inline(always)]
-pub fn vec4_new(x : f32, y : f32, z : f32) -> Vec4
+impl Vec4{
+
+#[inline]
+pub fn from_xyz(x : f32, y : f32, z : f32) -> Vec4
 {
   Vec4([
     x, 
@@ -25,8 +29,8 @@ pub fn vec4_new(x : f32, y : f32, z : f32) -> Vec4
   ])
 }
 
-#[inline(always)]
-pub fn vec4_add(_lhs : Vec4, _rhs : Vec4) -> Vec4
+#[inline]
+pub fn add(_lhs : Vec4, _rhs : Vec4) -> Vec4
 {
   Vec4([
     _lhs[0] + _rhs[0], 
@@ -36,9 +40,10 @@ pub fn vec4_add(_lhs : Vec4, _rhs : Vec4) -> Vec4
   ])
 }
 
-
-#[inline(always)]
-pub fn vec4_dot(a : &Vec4, b : &Vec4) -> f32
+#[inline]
+pub fn dot(a : &Vec4, b : &Vec4) -> f32
 {
   a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3]
 }
+}
+
