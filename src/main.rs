@@ -1,9 +1,9 @@
 mod math;
 mod particles;
 mod renderer;
+
 use glium::index::PrimitiveType;
 use glium::{glutin, implement_vertex, uniform, Surface};
-use renderer::*;
 use std::env;
 
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
@@ -31,7 +31,6 @@ fn main() {
     let some_third_vec = some_vec.add(some_other_vec);
 
     let some_vec4 = math::Vec4::from_xyz(0.0, 1.0, 5.0);
-    let some_quat = math::Quat::new();
 
     let some_mat4 = math::Mat4::from_translation([10.0, 5.0, 5.0]);
     let some_other_mat4 = math::Mat4::from_translation([10.0, 0.0, 5.0]);
@@ -56,11 +55,11 @@ fn main() {
 
     current_path.pop();
     let path = current_path.join("../../assets/shaders");
-    let mut shader_list: Vec<shading::Shader> = Vec::new();
+    let mut shader_list: Vec<renderer::Shader> = Vec::new();
     if path.is_dir() {
         for entry in path.read_dir().expect("Read path failed!") {
             if let Ok(entry) = entry {
-                let some_shader = shading::Shader::read(entry.path().clone());
+                let some_shader = renderer::Shader::read(entry.path().clone());
                 shader_list.push(some_shader);
             }
         }
@@ -101,8 +100,8 @@ fn main() {
     let mut frag_shader = String::new();
     for shader in shader_list {
         match shader.shadertype {
-            shading::ShaderType::Fragment => frag_shader = shader.code.clone(),
-            shading::ShaderType::Vertex => vert_shader = shader.code.clone(),
+            renderer::ShaderType::Fragment => frag_shader = shader.code.clone(),
+            renderer::ShaderType::Vertex => vert_shader = shader.code.clone(),
         }
     }
     let mut program =
@@ -132,15 +131,11 @@ fn main() {
 
         match rx.try_recv() {
             Ok(event) => match event {
-                notify::DebouncedEvent::NoticeWrite(path) => {
-                    println!("NoticeWrite to path: {:?}", path)
-                }
                 notify::DebouncedEvent::Write(path) => {
-                    println!("Wrote to path: {:?}", path);
-                    let some_shader = renderer::shading::Shader::read(path);
+                    let some_shader = renderer::Shader::read(path);
                     match some_shader.shadertype {
-                        shading::ShaderType::Fragment => frag_shader = some_shader.code.clone(),
-                        shading::ShaderType::Vertex => vert_shader = some_shader.code.clone(),
+                        renderer::ShaderType::Fragment => frag_shader = some_shader.code.clone(),
+                        renderer::ShaderType::Vertex => vert_shader = some_shader.code.clone(),
                     }
                     program =
                         glium::Program::from_source(&display, &vert_shader, &frag_shader, None)
@@ -155,13 +150,10 @@ fn main() {
 
         events_loop.poll_events(|event| match event {
             glutin::Event::WindowEvent { event, .. } => match event {
-                glutin::WindowEvent::Touch(touch) => println!("FOOBAR {:?}", touch),
+                glutin::WindowEvent::Touch(touch) => (),
                 glutin::WindowEvent::CloseRequested => running = false,
                 glutin::WindowEvent::Resized(logical_size) => {
-                    println!(
-                        "Got some resize event w{}:h{}",
-                        logical_size.width, logical_size.height
-                    );
+                    dbg!(logical_size);
                 }
                 _ => (),
             },

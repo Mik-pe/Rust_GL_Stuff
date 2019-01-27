@@ -1,5 +1,5 @@
 [package]
-name = "rust_sdl_mikpe"
+name = "rust_gl_stuff"
 version = "0.1.0"
 authors = ["Magrit <mikael.pettersson201@gmail.com>"]
 edition = "2018"

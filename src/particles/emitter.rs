@@ -1,8 +1,3 @@
 use super::Particle;
 
-
-
-pub struct Emitter
-{
-  
-}
+pub struct Emitter {}
