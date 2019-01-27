@@ -19,7 +19,7 @@ impl Vec3 {
     }
 
     #[inline]
-    pub fn add(self, _rhs: Vec3) -> Vec3 {
+    pub fn add(&self, _rhs: &Vec3) -> Vec3 {
         Vec3([self[0] + _rhs[0], self[1] + _rhs[1], self[2] + _rhs[2]])
     }
 

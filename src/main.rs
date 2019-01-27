@@ -26,9 +26,12 @@ fn watch(path: std::path::PathBuf, sender: std::sync::mpsc::Sender<notify::Debou
 }
 
 fn main() {
+    let mut my_emitter = particles::Emitter::new(20);
+    dbg!(&my_emitter);
+
     let some_vec = math::Vec3::new(0.0, 1.0, 2.0);
     let some_other_vec = math::Vec3::new(0.0, 1.0, 2.0);
-    let some_third_vec = some_vec.add(some_other_vec);
+    let some_third_vec = some_vec.add(&some_other_vec);
 
     let some_vec4 = math::Vec4::from_xyz(0.0, 1.0, 5.0);
 
@@ -109,12 +112,20 @@ fn main() {
     //TODO: structure code in a more sensical manner
     //TODO: Create better renderer-functions to wrap glutin
     //TODO: Create some material-structuringish
-
+    let mut delta_time;
+    let mut last_frame_time = SystemTime::now();
     while running {
-        let begin = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .subsec_millis() as f32;
+        //SETUP FRAME:
+        let this_frame_time = SystemTime::now();
+        let sec_part = this_frame_time.duration_since(last_frame_time).unwrap().as_secs() as f32;
+        let microsec_part = this_frame_time.duration_since(last_frame_time).unwrap().subsec_micros() as f32;
+        delta_time =  sec_part * 1000.0 + microsec_part / 1000.0;
+        last_frame_time = this_frame_time;
+
+        //UPDATE FRAME:
+        my_emitter.tick(delta_time);
+
+        //DRAW FRAME:
         let mut target = display.draw();
         target
             .draw(
@@ -122,7 +133,7 @@ fn main() {
                 &index_buffer,
                 &program,
                 &glium::uniform! {
-                  time: begin,
+                  time: delta_time,
                 },
                 &Default::default(),
             )
