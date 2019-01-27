@@ -1,4 +1,5 @@
 mod math;
+mod particles;
 mod renderer;
 use glium::index::PrimitiveType;
 use glium::{glutin, implement_vertex, uniform, Surface};
