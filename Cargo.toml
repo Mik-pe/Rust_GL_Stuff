@@ -2,9 +2,27 @@
 name = "rust_gl_stuff"
 version = "0.1.0"
 authors = ["Magrit <mikael.pettersson201@gmail.com>"]
+publish = false
 edition = "2018"
 
 [dependencies]
-glium = "*"
+gfx-hal = "*"
 notify = "*"
+winit = "*"
 rand = "*"
+gfx-backend-empty = "*"
+
+[features]
+default = []
+gl = ["gfx-backend-gl"]
+vulkan = ["gfx-backend-vulkan"]
+unstable = []
+
+[dependencies.gfx-backend-gl]
+version = "*"
+features = ["glutin"]
+optional = true
+
+[dependencies.gfx-backend-vulkan]
+version = "*"
+optional = true
