@@ -24,7 +24,7 @@ use gfx_hal::{
         PipelineStage, Rasterizer, Rect, Viewport,
     },
     queue::Submission,
-    Backbuffer, Device, FrameSync, Graphics, Instance, Primitive, Surface, SwapImageIndex,
+    Backbuffer, Device, FrameSync, Graphics, Instance, Primitive, Surface, PhysicalDevice, SwapImageIndex,
     Swapchain, SwapchainConfig,
 };
 use winit::{Event, EventsLoop, KeyboardInput, VirtualKeyCode, WindowBuilder, WindowEvent};
