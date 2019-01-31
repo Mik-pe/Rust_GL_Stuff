@@ -1,22 +1,25 @@
+use glsl_to_spirv::ShaderType;
 use std::fs::File;
 use std::io::prelude::*;
 
-pub enum ShaderType {
-    Vertex,
-    Fragment,
-}
-
 pub struct Shader {
     pub code: String,
-    pub shadertype: ShaderType,
+    pub shader_type: ShaderType,
 }
 
 impl Shader {
-    pub fn new(code: String, shadertype: ShaderType) -> Shader {
+    pub fn new(code: String, shader_type: ShaderType) -> Shader {
         Shader {
             code: code,
-            shadertype: shadertype,
+            shader_type: shader_type,
         }
+    }
+    pub fn compile(self) -> Vec<u8> {
+        glsl_to_spirv::compile(&self.code, self.shader_type)
+            .unwrap()
+            .bytes()
+            .map(|b| b.unwrap())
+            .collect()
     }
 
     pub fn read(path: std::path::PathBuf) -> Shader {

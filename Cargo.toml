@@ -11,6 +11,7 @@ notify = "*"
 winit = "*"
 rand = "*"
 gfx-backend-empty = "*"
+glsl-to-spirv = "*"
 
 [features]
 default = []
