@@ -4,6 +4,8 @@ mod renderer;
 
 #[cfg(feature = "gl")]
 use gfx_backend_gl as backend;
+#[cfg(feature = "dx12")]
+use gfx_backend_dx12 as backend;
 #[cfg(feature = "vulkan")]
 use gfx_backend_vulkan as backend;
 

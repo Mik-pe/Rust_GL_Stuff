@@ -17,7 +17,13 @@ glsl-to-spirv = "*"
 default = []
 gl = ["gfx-backend-gl"]
 vulkan = ["gfx-backend-vulkan"]
+dx12 = ["gfx-backend-dx12"]
 unstable = []
+
+[dependencies.gfx-backend-dx12]
+version = "*"
+optional = true
+
 
 [dependencies.gfx-backend-gl]
 version = "*"
