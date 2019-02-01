@@ -91,64 +91,72 @@ struct DeviceState<B: Backend> {
     queues: gfx_hal::QueueGroup<B, ::gfx_hal::Graphics>,
 }
 
-// fn reset_pipeline<B: gfx_hal::Backend>(
-//     vert_spirv: Vec<u8>,
-//     frag_spirv: Vec<u8>,
-//     device: backend::Device,
-//     render_pass: B::RenderPass,
-// ) -> B::GraphicsPipeline {
-//     let pipeline_layout = unsafe { device.create_pipeline_layout(&[], &[]) }
-//         .expect("Coult not create pipeline layout");
-//     let vertex_shader_module = unsafe { device.create_shader_module(&vert_spirv) }
-//         .expect("Could not create vertex shader module");
+//TODO: call this function using ptr, shaders etc...
+unsafe fn reset_pipeline<B: Backend>(
+    vert_spirv: Vec<u8>,
+    frag_spirv: Vec<u8>,
+    device_ptr: std::rc::Rc<RefCell<DeviceState<B>>>,
+    render_pass: &B::RenderPass,
+) -> PipelineState<B> {
+    //take a ptr!
+    let device = &device_ptr.borrow().device;
 
-//     let fragment_shader_module = unsafe { device.create_shader_module(&frag_spirv) }
-//         .expect("Could not create fragment shader module");
+    let pipeline_layout = device.create_pipeline_layout(&[], &[]).expect("Coult not create pipeline layout");
 
-//     // A pipeline object encodes almost all the state you need in order to draw
-//     // geometry on screen. For now that's really only which shaders to use, what
-//     // kind of blending to do, and what kind of primitives to draw.
-//     let vs_entry = EntryPoint::<backend::Backend> {
-//         entry: "main",
-//         module: &vertex_shader_module,
-//         specialization: Default::default(),
-//     };
+    let vertex_shader_module = device.create_shader_module(&vert_spirv).expect("Could not create vertex shader module");
 
-//     let fs_entry = EntryPoint::<backend::Backend> {
-//         entry: "main",
-//         module: &fragment_shader_module,
-//         specialization: Default::default(),
-//     };
+    let fragment_shader_module = device.create_shader_module(&frag_spirv).expect("Could not create fragment shader module");
 
-//     let shader_entries = GraphicsShaderSet {
-//         vertex: vs_entry,
-//         hull: None,
-//         domain: None,
-//         geometry: None,
-//         fragment: Some(fs_entry),
-//     };
+    // A pipeline object encodes almost all the state you need in order to draw
+    // geometry on screen. For now that's really only which shaders to use, what
+    // kind of blending to do, and what kind of primitives to draw.
+    let vs_entry = EntryPoint::<B> {
+        entry: "main",
+        module: &vertex_shader_module,
+        specialization: Default::default(),
+    };
 
-//     let subpass = Subpass {
-//         index: 0,
-//         main_pass: &render_pass,
-//     };
+    let fs_entry = EntryPoint::<B> {
+        entry: "main",
+        module: &fragment_shader_module,
+        specialization: Default::default(),
+    };
 
-//     let mut pipeline_desc = GraphicsPipelineDesc::new(
-//         shader_entries,
-//         Primitive::TriangleList,
-//         Rasterizer::FILL,
-//         &pipeline_layout,
-//         subpass,
-//     );
+    let shader_entries = GraphicsShaderSet {
+        vertex: vs_entry,
+        hull: None,
+        domain: None,
+        geometry: None,
+        fragment: Some(fs_entry),
+    };
 
-//     pipeline_desc
-//         .blender
-//         .targets
-//         .push(ColorBlendDesc(ColorMask::ALL, BlendState::ALPHA));
+    let subpass = Subpass {
+        index: 0,
+        main_pass: render_pass,
+    };
 
-//     unsafe { device.create_graphics_pipeline(&pipeline_desc, None) }
-//         .expect("Could not create graphics pipeline")
-// }
+    let mut pipeline_desc = GraphicsPipelineDesc::new(
+        shader_entries,
+        Primitive::TriangleList,
+        Rasterizer::FILL,
+        &pipeline_layout,
+        subpass,
+    );
+
+    pipeline_desc
+        .blender
+        .targets
+        .push(ColorBlendDesc(ColorMask::ALL, BlendState::ALPHA));
+
+
+    let pipeline = device.create_graphics_pipeline(&pipeline_desc, None).expect("Could not create graphics pipeline.");
+
+    PipelineState{
+        pipeline : Some(pipeline),
+        pipeline_layout : Some(pipeline_layout),
+        device : Rc::clone(&device_ptr),
+    }
+}
 
 fn main() {
     //TODO MATH STUFF:
