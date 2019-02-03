@@ -2,10 +2,10 @@ mod math;
 mod particles;
 mod renderer;
 
-#[cfg(feature = "gl")]
-use gfx_backend_gl as backend;
 #[cfg(feature = "dx12")]
 use gfx_backend_dx12 as backend;
+#[cfg(feature = "gl")]
+use gfx_backend_gl as backend;
 #[cfg(feature = "vulkan")]
 use gfx_backend_vulkan as backend;
 
@@ -82,30 +82,30 @@ fn run_shader_code(path: &std::path::PathBuf) -> (Vec<u8>, Vec<u8>) {
 struct PipelineState<B: Backend> {
     pipeline: Option<B::GraphicsPipeline>,
     pipeline_layout: Option<B::PipelineLayout>,
-    device: std::rc::Rc<RefCell<DeviceState<B>>>,
-}
-
-struct DeviceState<B: Backend> {
-    device: B::Device,
-    physical_device: B::PhysicalDevice,
-    queues: gfx_hal::QueueGroup<B, ::gfx_hal::Graphics>,
+    device: std::rc::Rc<RefCell<renderer::DeviceState<B>>>,
 }
 
 //TODO: call this function using ptr, shaders etc...
 unsafe fn reset_pipeline<B: Backend>(
     vert_spirv: Vec<u8>,
     frag_spirv: Vec<u8>,
-    device_ptr: std::rc::Rc<RefCell<DeviceState<B>>>,
+    device_ptr: std::rc::Rc<RefCell<renderer::DeviceState<B>>>,
     render_pass: &B::RenderPass,
 ) -> PipelineState<B> {
     //take a ptr!
     let device = &device_ptr.borrow().device;
 
-    let pipeline_layout = device.create_pipeline_layout(&[], &[]).expect("Coult not create pipeline layout");
+    let pipeline_layout = device
+        .create_pipeline_layout(&[], &[])
+        .expect("Coult not create pipeline layout");
 
-    let vertex_shader_module = device.create_shader_module(&vert_spirv).expect("Could not create vertex shader module");
+    let vertex_shader_module = device
+        .create_shader_module(&vert_spirv)
+        .expect("Could not create vertex shader module");
 
-    let fragment_shader_module = device.create_shader_module(&frag_spirv).expect("Could not create fragment shader module");
+    let fragment_shader_module = device
+        .create_shader_module(&frag_spirv)
+        .expect("Could not create fragment shader module");
 
     // A pipeline object encodes almost all the state you need in order to draw
     // geometry on screen. For now that's really only which shaders to use, what
@@ -148,13 +148,14 @@ unsafe fn reset_pipeline<B: Backend>(
         .targets
         .push(ColorBlendDesc(ColorMask::ALL, BlendState::ALPHA));
 
+    let pipeline = device
+        .create_graphics_pipeline(&pipeline_desc, None)
+        .expect("Could not create graphics pipeline.");
 
-    let pipeline = device.create_graphics_pipeline(&pipeline_desc, None).expect("Could not create graphics pipeline.");
-
-    PipelineState{
-        pipeline : Some(pipeline),
-        pipeline_layout : Some(pipeline_layout),
-        device : Rc::clone(&device_ptr),
+    PipelineState {
+        pipeline: Some(pipeline),
+        pipeline_layout: Some(pipeline_layout),
+        device: Rc::clone(&device_ptr),
     }
 }
 
@@ -185,17 +186,15 @@ fn main() {
         watch(path, tx.clone());
     });
 
-    // Create a window with winit.
-    let mut events_loop = EventsLoop::new();
-
-    let wb = WindowBuilder::new();
+    let mut window_state = renderer::WindowState::new((640, 480), "TestWindow".to_owned());
 
     #[cfg(not(feature = "gl"))]
     let (_window, _instance, mut adapters, mut surface) = {
-        let window = wb
-            .with_title("Particle Test (Vulkan)")
-            .with_dimensions((640, 480).into())
-            .build(&events_loop)
+        let window = window_state
+            .wb
+            .take()
+            .unwrap()
+            .build(&window_state.events_loop)
             .unwrap();
         let instance = backend::Instance::create("Particle instance", 1);
         let surface = instance.create_surface(&window);
@@ -213,10 +212,9 @@ fn main() {
             )
             .with_vsync(true);
             backend::glutin::GlWindow::new(
-                wb.with_title("Particle Test (OpenGL)")
-                    .with_dimensions((640, 480).into()),
+                window_state.wb.take().unwrap(),
                 builder,
-                &events_loop,
+                &window_state.events_loop,
             )
             .unwrap()
         };
@@ -234,15 +232,21 @@ fn main() {
     let mut adapter = adapters.remove(0);
     let memory_types = adapter.physical_device.memory_properties().memory_types;
     let limits = adapter.physical_device.limits();
-    let (device, mut queue_group) = adapter
-        .open_with::<_, gfx_hal::Graphics>(1, |family| surface.supports_queue_family(family))
-        .unwrap();
+    let device_ptr = Rc::new(RefCell::new(renderer::DeviceState::new(adapter, &surface)));
 
-    let mut command_pool =
-        unsafe { device.create_command_pool_typed(&queue_group, CommandPoolCreateFlags::empty()) }
-            .expect("Can't create command pool");
+    //TODO: Move all of these:
+    //Currently this is non-working as it pushes us to
+    //borrow mutable references in many places.
+    //Consider moving all this code to
+    //a separate state-implementation
+    let device = &device_state.device;
+    let physical_device = &device_state.physical_device;
 
-    let physical_device = &adapter.physical_device;
+    let mut command_pool = unsafe {
+        device.create_command_pool_typed(&device_state.queues, CommandPoolCreateFlags::empty())
+    }
+    .expect("Can't create command pool");
+
     let (caps, formats, _, _) = surface.compatibility(physical_device);
 
     let surface_color_format = {
@@ -428,7 +432,7 @@ fn main() {
         // }
 
         // If the window is closed, or Escape is pressed, quit
-        events_loop.poll_events(|event| {
+        window_state.poll_events(|event| {
             if let Event::WindowEvent { event, .. } = event {
                 match event {
                     WindowEvent::CloseRequested => quitting = true,
@@ -460,9 +464,7 @@ fn main() {
                 }
             }
         };
-        // We have to build a command buffer before we send it off to draw.
-        // We don't technically have to do this every frame, but if it needs to
-        // change every frame, then we do.
+
         let mut cmd_buffer = command_pool.acquire_command_buffer::<gfx_hal::command::OneShot>();
         unsafe {
             cmd_buffer.begin();
@@ -498,8 +500,7 @@ fn main() {
                 encoder.draw(0..3, 0..1);
             }
 
-            // Finish building the command buffer - it's now ready to send to the
-            // GPU.
+            // Finish building the command buffer - it's now ready to send to the GPU.
             cmd_buffer.finish();
             let submission = Submission {
                 command_buffers: Some(&cmd_buffer),
@@ -507,14 +508,16 @@ fn main() {
                 signal_semaphores: &[],
             };
 
-            queue_group.queues[0].submit(submission, Some(&mut frame_fence));
+            device_state.queues.queues[0].submit(submission, Some(&mut frame_fence));
 
             // TODO: replace with semaphore
             device.wait_for_fence(&frame_fence, !0).unwrap();
             command_pool.free(Some(cmd_buffer));
 
             // present frame
-            if let Err(_) = swapchain.present_nosemaphores(&mut queue_group.queues[0], frame) {
+            if let Err(_) =
+                swapchain.present_nosemaphores(&mut device_state.queues.queues[0], frame)
+            {
                 recreate_swapchain = true;
             }
         }
@@ -537,33 +540,6 @@ fn main() {
         device.destroy_swapchain(swapchain);
     }
     println!("Down here!");
-    // let mut delta_time;
-    // let mut last_frame_time = SystemTime::now();
-    // while running {
-    //     //SETUP FRAME:
-    //     let this_frame_time = SystemTime::now();
-    //     let sec_part = this_frame_time.duration_since(last_frame_time).unwrap().as_secs() as f32;
-    //     let microsec_part = this_frame_time.duration_since(last_frame_time).unwrap().subsec_micros() as f32;
-    //     delta_time =  sec_part * 1000.0 + microsec_part / 1000.0;
-    //     last_frame_time = this_frame_time;
-
-    //     //UPDATE FRAME:
-    //     my_emitter.tick(delta_time);
-
-    //     //DRAW FRAME:
-    //     let mut target = display.draw();
-    //     target
-    //         .draw(
-    //             &vertex_buffer,
-    //             &index_buffer,
-    //             &program,
-    //             &glium::uniform! {
-    //               time: delta_time,
-    //             },
-    //             &Default::default(),
-    //         )
-    //         .unwrap();
-    //     target.finish().unwrap();
 
     //How do we join our threads?
     //Just don't mind?
