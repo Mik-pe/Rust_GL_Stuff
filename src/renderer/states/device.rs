@@ -1,4 +1,6 @@
-use gfx_hal::{Adapter, Backend, Graphics, QueueGroup, Surface};
+use super::backend::BackendState;
+
+use gfx_hal::{Adapter, Backend, Graphics, Instance, QueueGroup, Surface};
 
 pub struct DeviceState<B: Backend> {
   pub device: B::Device,

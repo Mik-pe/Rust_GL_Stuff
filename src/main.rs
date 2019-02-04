@@ -187,52 +187,12 @@ fn main() {
     });
 
     let mut window_state = renderer::WindowState::new((640, 480), "TestWindow".to_owned());
+    let (mut backend_state, instance) = renderer::states::create_backend(&mut window_state);
 
-    #[cfg(not(feature = "gl"))]
-    let (_window, _instance, mut adapters, mut surface) = {
-        let window = window_state
-            .wb
-            .take()
-            .unwrap()
-            .build(&window_state.events_loop)
-            .unwrap();
-        let instance = backend::Instance::create("Particle instance", 1);
-        let surface = instance.create_surface(&window);
-        let adapters = instance.enumerate_adapters();
-        (window, instance, adapters, surface)
-    };
-
-    #[cfg(feature = "gl")]
-    let (mut adapters, mut surface) = {
-        let window = {
-            let builder = backend::config_context(
-                backend::glutin::ContextBuilder::new(),
-                ColorFormat::SELF,
-                None,
-            )
-            .with_vsync(true);
-            backend::glutin::GlWindow::new(
-                window_state.wb.take().unwrap(),
-                builder,
-                &window_state.events_loop,
-            )
-            .unwrap()
-        };
-
-        let surface = backend::Surface::from_window(window);
-        let adapters = surface.enumerate_adapters();
-        (adapters, surface)
-    };
-
-    for adapter in &adapters {
-        dbg!(&adapter.info);
-    }
-
-    //First gpu will probably do!
-    let mut adapter = adapters.remove(0);
-    let memory_types = adapter.physical_device.memory_properties().memory_types;
-    let limits = adapter.physical_device.limits();
-    let device_ptr = Rc::new(RefCell::new(renderer::DeviceState::new(adapter, &surface)));
+    let mut device_state = renderer::DeviceState::new(
+        backend_state.adapter.adapter.take().unwrap(),
+        &backend_state.surface,
+    );
 
     //TODO: Move all of these:
     //Currently this is non-working as it pushes us to
@@ -247,7 +207,7 @@ fn main() {
     }
     .expect("Can't create command pool");
 
-    let (caps, formats, _, _) = surface.compatibility(physical_device);
+    let (caps, formats, _, _) = backend_state.surface.compatibility(physical_device);
 
     let surface_color_format = {
         // We must pick a color format from the list of supported formats. If there
@@ -357,7 +317,7 @@ fn main() {
     let extent = swap_config.extent.to_extent();
 
     let (mut swapchain, backbuffer) =
-        unsafe { device.create_swapchain(&mut surface, swap_config, None) }
+        unsafe { device.create_swapchain(&mut backend_state.surface, swap_config, None) }
             .expect("Could not create swapchain");
 
     let (frame_views, framebuffers) = match backbuffer {
