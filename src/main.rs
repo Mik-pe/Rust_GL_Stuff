@@ -233,7 +233,7 @@ fn main() {
     // but eventually we might have depth/stencil attachments, or even other color
     // attachments for other purposes.
     let fullscreen_pass =
-        renderer::presentation::create_fullscreen_pass(surface_color_format, &device);
+        renderer::create_fullscreen_pass::<backend::Backend>(surface_color_format, &device);
 
     //uniforms and push constants go here:
     let pipeline_layout = unsafe { device.create_pipeline_layout(&[], &[]) }
