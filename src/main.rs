@@ -92,16 +92,10 @@ struct PipelineState<B: Backend> {
 unsafe fn reset_pipeline<B: Backend>(
     vert_spirv: Vec<u8>,
     frag_spirv: Vec<u8>,
-    device_ptr: std::rc::Rc<RefCell<renderer::DeviceState<B>>>,
+    pipeline_layout: &B::PipelineLayout,
+    device: &B::Device,
     render_pass: &B::RenderPass,
-) -> PipelineState<B> {
-    //take a ptr!
-    let device = &device_ptr.borrow().device;
-
-    let pipeline_layout = device
-        .create_pipeline_layout(&[], &[])
-        .expect("Coult not create pipeline layout");
-
+) -> B::GraphicsPipeline {
     let vertex_shader_module = device
         .create_shader_module(&vert_spirv)
         .expect("Could not create vertex shader module");
@@ -151,16 +145,11 @@ unsafe fn reset_pipeline<B: Backend>(
         .targets
         .push(ColorBlendDesc(ColorMask::ALL, BlendState::ALPHA));
 
-    let pipeline = device
+    device
         .create_graphics_pipeline(&pipeline_desc, None)
-        .expect("Could not create graphics pipeline.");
-
-    PipelineState {
-        pipeline: Some(pipeline),
-        pipeline_layout: Some(pipeline_layout),
-        device: Rc::clone(&device_ptr),
-    }
+        .expect("Could not create graphics pipeline.")
 }
+
 const WINDOW_DIMENSIONS: Extent2D = Extent2D {
     width: 640,
     height: 480,
@@ -180,7 +169,7 @@ fn main() {
     let _multiplied_vec4 = math::mat4_mul_vec4(&third_mat4, &some_vec4);
     //TODO MATH STUFF
 
-    let (tx, _rx) = channel();
+    let (tx, rx) = channel();
 
     let mut current_path = env::current_exe().unwrap();
     current_path.pop();
@@ -238,55 +227,17 @@ fn main() {
     //uniforms and push constants go here:
     let pipeline_layout = unsafe { device.create_pipeline_layout(&[], &[]) }
         .expect("Coult not create pipeline layout");
-    let vertex_shader_module = unsafe { device.create_shader_module(&vert_spirv) }
-        .expect("Could not create vertex shader module");
-    let fragment_shader_module = unsafe { device.create_shader_module(&frag_spirv) }
-        .expect("Could not create fragment shader module");
-
     // A pipeline object encodes almost all the state you need in order to draw
     // geometry on screen. For now that's really only which shaders to use, what
     // kind of blending to do, and what kind of primitives to draw.
-    let pipeline = {
-        let vs_entry = EntryPoint::<backend::Backend> {
-            entry: "main",
-            module: &vertex_shader_module,
-            specialization: Default::default(),
-        };
-
-        let fs_entry = EntryPoint::<backend::Backend> {
-            entry: "main",
-            module: &fragment_shader_module,
-            specialization: Default::default(),
-        };
-
-        let shader_entries = GraphicsShaderSet {
-            vertex: vs_entry,
-            hull: None,
-            domain: None,
-            geometry: None,
-            fragment: Some(fs_entry),
-        };
-
-        let subpass = Subpass {
-            index: 0,
-            main_pass: &fullscreen_pass,
-        };
-
-        let mut pipeline_desc = GraphicsPipelineDesc::new(
-            shader_entries,
-            Primitive::TriangleList,
-            Rasterizer::FILL,
+    let mut pipeline = unsafe {
+        reset_pipeline::<backend::Backend>(
+            vert_spirv,
+            frag_spirv,
             &pipeline_layout,
-            subpass,
-        );
-
-        pipeline_desc
-            .blender
-            .targets
-            .push(ColorBlendDesc(ColorMask::ALL, BlendState::ALPHA));
-
-        unsafe { device.create_graphics_pipeline(&pipeline_desc, None) }
-            .expect("Could not create graphics pipeline")
+            &device,
+            &fullscreen_pass,
+        )
     };
 
     let swap_config =
@@ -354,24 +305,29 @@ fn main() {
     };
     let mut quitting = false;
     while quitting == false {
-        // match rx.try_recv() {
-        //     Ok(event) => match event {
-        //         notify::DebouncedEvent::Write(path) => {
-        //             let some_shader = renderer::Shader::read(path);
-        //             match some_shader.shadertype {
-        //                 renderer::ShaderType::Fragment => frag_shader = some_shader.code.clone(),
-        //                 renderer::ShaderType::Vertex => vert_shader = some_shader.code.clone(),
-        //             }
-        //             program =
-        //                 glium::Program::from_source(&display, &vert_shader, &frag_shader, None)
-        //                     .unwrap();
-        //         }
-        //         notify::DebouncedEvent::Remove(path) => println!("Removed path: {:?}", path),
-        //         notify::DebouncedEvent::Create(path) => println!("Created to path: {:?}", path),
-        //         _ => (),
-        //     },
-        //     _ => (),
-        // }
+        match rx.try_recv() {
+            Ok(event) => match event {
+                notify::DebouncedEvent::Write(_watched_path) => {
+                    let mut current_path = env::current_exe().unwrap();
+                    current_path.pop();
+                    let path = current_path.join("../../assets/shaders");
+                    let (vert_spirv, frag_spirv) = run_shader_code(&path);
+                    pipeline = unsafe {
+                        reset_pipeline::<backend::Backend>(
+                            vert_spirv,
+                            frag_spirv,
+                            &pipeline_layout,
+                            &device,
+                            &fullscreen_pass,
+                        )
+                    };
+                }
+                notify::DebouncedEvent::Remove(path) => println!("Removed path: {:?}", path),
+                notify::DebouncedEvent::Create(path) => println!("Created to path: {:?}", path),
+                _ => (),
+            },
+            _ => (),
+        }
 
         // If the window is closed, or Escape is pressed, quit
         window_state.poll_events(|event| {
