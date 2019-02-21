@@ -23,11 +23,12 @@ use gfx_hal::{
         PipelineStage, Rasterizer, Rect, Viewport,
     },
     queue::Submission,
+    window::Extent2D,
     Backbuffer, Backend, CommandQueue, Device, FrameSync, Graphics, Instance, PhysicalDevice,
     Primitive, Surface, SwapImageIndex, Swapchain, SwapchainConfig,
 };
 use glsl_to_spirv::ShaderType;
-use winit::{Event, EventsLoop, KeyboardInput, VirtualKeyCode, WindowBuilder, WindowEvent};
+use winit::{Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 
 // use glium::index::PrimitiveType;
 // use glium::{glutin, implement_vertex, uniform, Surface};
@@ -79,6 +80,7 @@ fn run_shader_code(path: &std::path::PathBuf) -> (Vec<u8>, Vec<u8>) {
     (vert_spirv, frag_spirv)
 }
 
+#[allow(dead_code)]
 struct PipelineState<B: Backend> {
     pipeline: Option<B::GraphicsPipeline>,
     pipeline_layout: Option<B::PipelineLayout>,
@@ -86,6 +88,7 @@ struct PipelineState<B: Backend> {
 }
 
 //TODO: call this function using ptr, shaders etc...
+#[allow(dead_code)]
 unsafe fn reset_pipeline<B: Backend>(
     vert_spirv: Vec<u8>,
     frag_spirv: Vec<u8>,
@@ -158,11 +161,14 @@ unsafe fn reset_pipeline<B: Backend>(
         device: Rc::clone(&device_ptr),
     }
 }
+const WINDOW_DIMENSIONS: Extent2D = Extent2D {
+    width: 640,
+    height: 480,
+};
 
 fn main() {
     //TODO MATH STUFF:
-    let mut my_emitter = particles::Emitter::new(20);
-    // dbg!(&my_emitter);
+    let mut _my_emitter = particles::Emitter::new(20);
     let some_vec = math::Vec3::new(0.0, 1.0, 2.0);
     let some_other_vec = math::Vec3::new(0.0, 1.0, 2.0);
     let some_third_vec = some_vec.add(&some_other_vec);
@@ -170,35 +176,36 @@ fn main() {
     let some_mat4 = math::Mat4::from_translation([10.0, 5.0, 5.0]);
     let some_other_mat4 = math::Mat4::from_translation([10.0, 0.0, 5.0]);
     let third_mat4 = some_mat4.mul(&some_other_mat4);
-    let multiplied_vec = math::mat4_mul_vec3(&third_mat4, &some_third_vec);
-    let multiplied_vec4 = math::mat4_mul_vec4(&third_mat4, &some_vec4);
+    let _multiplied_vec = math::mat4_mul_vec3(&third_mat4, &some_third_vec);
+    let _multiplied_vec4 = math::mat4_mul_vec4(&third_mat4, &some_vec4);
     //TODO MATH STUFF
 
-    let mut running = true;
-    let (tx, rx) = channel();
+    let (tx, _rx) = channel();
 
     let mut current_path = env::current_exe().unwrap();
     current_path.pop();
     let path = current_path.join("../../assets/shaders");
     let (vert_spirv, frag_spirv) = run_shader_code(&path);
 
-    let child = thread::spawn(move || {
+    let _child = thread::spawn(move || {
         watch(path, tx.clone());
     });
 
-    let mut window_state = renderer::WindowState::new((640, 480), "TestWindow".to_owned());
-    let (mut backend_state, instance) = renderer::states::create_backend(&mut window_state);
+    let mut window_state = renderer::WindowState::new(
+        (
+            WINDOW_DIMENSIONS.width as i32,
+            WINDOW_DIMENSIONS.height as i32,
+        ),
+        "TestWindow".to_owned(),
+    );
+    let (mut backend_state, _instance, mut adapter_state) =
+        renderer::states::create_backend(&mut window_state);
 
     let mut device_state = renderer::DeviceState::new(
-        backend_state.adapter.adapter.take().unwrap(),
+        adapter_state.adapter.take().unwrap(),
         &backend_state.surface,
     );
 
-    //TODO: Move all of these:
-    //Currently this is non-working as it pushes us to
-    //borrow mutable references in many places.
-    //Consider moving all this code to
-    //a separate state-implementation
     let device = &device_state.device;
     let physical_device = &device_state.physical_device;
 
@@ -225,43 +232,14 @@ fn main() {
     // purposes. Right now, we only have a color attachment for the final output,
     // but eventually we might have depth/stencil attachments, or even other color
     // attachments for other purposes.
-    let render_pass = {
-        let color_attachment = Attachment {
-            format: Some(surface_color_format),
-            samples: 1,
-            ops: AttachmentOps::new(AttachmentLoadOp::Clear, AttachmentStoreOp::Store),
-            stencil_ops: AttachmentOps::DONT_CARE,
-            layouts: Layout::Undefined..Layout::Present,
-        };
-
-        // A render pass could have multiple subpasses - but we're using one for now.
-        let subpass = SubpassDesc {
-            colors: &[(0, Layout::ColorAttachmentOptimal)],
-            depth_stencil: None,
-            inputs: &[],
-            resolves: &[],
-            preserves: &[],
-        };
-
-        // This expresses the dependencies between subpasses. Again, we only have
-        // one subpass for now. Future tutorials may go into more detail.
-        let dependency = SubpassDependency {
-            passes: SubpassRef::External..SubpassRef::Pass(0),
-            stages: PipelineStage::COLOR_ATTACHMENT_OUTPUT..PipelineStage::COLOR_ATTACHMENT_OUTPUT,
-            accesses: Access::empty()
-                ..(Access::COLOR_ATTACHMENT_READ | Access::COLOR_ATTACHMENT_WRITE),
-        };
-
-        unsafe { device.create_render_pass(&[color_attachment], &[subpass], &[dependency]) }
-            .expect("Could not create render pass")
-    };
+    let fullscreen_pass =
+        renderer::presentation::create_fullscreen_pass(surface_color_format, &device);
 
     //uniforms and push constants go here:
     let pipeline_layout = unsafe { device.create_pipeline_layout(&[], &[]) }
         .expect("Coult not create pipeline layout");
     let vertex_shader_module = unsafe { device.create_shader_module(&vert_spirv) }
         .expect("Could not create vertex shader module");
-
     let fragment_shader_module = unsafe { device.create_shader_module(&frag_spirv) }
         .expect("Could not create fragment shader module");
 
@@ -291,7 +269,7 @@ fn main() {
 
         let subpass = Subpass {
             index: 0,
-            main_pass: &render_pass,
+            main_pass: &fullscreen_pass,
         };
 
         let mut pipeline_desc = GraphicsPipelineDesc::new(
@@ -347,7 +325,7 @@ fn main() {
             let fbos = image_views
                 .iter()
                 .map(|image_view| {
-                    unsafe { device.create_framebuffer(&render_pass, vec![image_view], extent) }
+                    unsafe { device.create_framebuffer(&fullscreen_pass, vec![image_view], extent) }
                         .expect("Could not create framebuffer")
                 })
                 .collect();
@@ -370,6 +348,10 @@ fn main() {
     let mut frame_fence = device.create_fence(false).expect("Can't create fence"); // TODO: remove
     let present_semaphore = device.create_semaphore().unwrap();
     let mut recreate_swapchain = false;
+    let mut resize_dims = Extent2D {
+        width: 0,
+        height: 0,
+    };
     let mut quitting = false;
     while quitting == false {
         // match rx.try_recv() {
@@ -404,6 +386,9 @@ fn main() {
                             },
                         ..
                     } => quitting = true,
+                    WindowEvent::Resized(logical_size) => {
+                        dbg!(logical_size);
+                    }
                     _ => {}
                 }
             }
@@ -446,11 +431,10 @@ fn main() {
 
             // Choose a pipeline to use.
             cmd_buffer.bind_graphics_pipeline(&pipeline);
-
             {
                 // Clear the screen and begin the render pass.
                 let mut encoder = cmd_buffer.begin_render_pass_inline(
-                    &render_pass,
+                    &fullscreen_pass,
                     &framebuffers[frame as usize],
                     viewport.rect,
                     &[ClearValue::Color(ClearColor::Float([0.0, 0.0, 0.0, 1.0]))],
@@ -489,7 +473,7 @@ fn main() {
 
         device.destroy_fence(frame_fence);
         device.destroy_semaphore(frame_semaphore);
-        device.destroy_render_pass(render_pass);
+        device.destroy_render_pass(fullscreen_pass);
 
         device.destroy_graphics_pipeline(pipeline);
         device.destroy_pipeline_layout(pipeline_layout);
@@ -499,9 +483,7 @@ fn main() {
 
         device.destroy_swapchain(swapchain);
     }
-    println!("Down here!");
-
     //How do we join our threads?
-    //Just don't mind?
+    //Just don't mind as the OS handles this?
     // child.join().unwrap();
 }
