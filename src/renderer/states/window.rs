@@ -8,7 +8,7 @@ pub struct WindowState {
 impl WindowState {
     pub fn new(wh: (i32, i32), title: String) -> Self {
         // Create a window with winit.
-        let mut events_loop = EventsLoop::new();
+        let events_loop = EventsLoop::new();
 
         let wb = WindowBuilder::new()
             .with_dimensions(winit::dpi::LogicalSize::new(wh.0 as _, wh.1 as _))

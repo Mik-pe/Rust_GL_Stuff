@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct Vec3(pub [f32; 3]);
 
 impl std::ops::Index<usize> for Vec3 {

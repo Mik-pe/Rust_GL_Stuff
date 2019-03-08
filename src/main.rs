@@ -10,35 +10,31 @@ use gfx_backend_gl as backend;
 use gfx_backend_vulkan as backend;
 
 use gfx_hal::{
-    command::{ClearColor, ClearValue, Primary},
-    format::{AsFormat, Aspects, ChannelType, Format, Rgba8Srgb as ColorFormat, Swizzle},
-    image::{Access, Layout, SubresourceRange, ViewKind},
-    pass::{
-        Attachment, AttachmentLoadOp, AttachmentOps, AttachmentStoreOp, Subpass, SubpassDependency,
-        SubpassDesc, SubpassRef,
-    },
+    adapter::PhysicalDevice,
+    buffer,
+    memory,
+    command::{ClearColor, ClearValue},
+    format::{Aspects, ChannelType, Format, Swizzle},
+    image::{SubresourceRange, ViewKind},
+    pass::Subpass,
     pool::CommandPoolCreateFlags,
     pso::{
-        BlendState, ColorBlendDesc, ColorMask, EntryPoint, GraphicsPipelineDesc, GraphicsShaderSet,
-        PipelineStage, Rasterizer, Rect, Viewport,
+        AttributeDesc, BlendState, ColorBlendDesc, ColorMask, Element, EntryPoint,
+        GraphicsPipelineDesc, GraphicsShaderSet, PipelineStage, Rasterizer, Rect, Viewport,
     },
     queue::Submission,
     window::Extent2D,
-    Backbuffer, Backend, CommandQueue, Device, FrameSync, Graphics, Instance, PhysicalDevice,
-    Primitive, Surface, SwapImageIndex, Swapchain, SwapchainConfig,
+    Backbuffer, Backend, Device, FrameSync, Primitive, Surface, Swapchain, SwapchainConfig,
 };
 use glsl_to_spirv::ShaderType;
 use winit::{Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 
-// use glium::index::PrimitiveType;
-// use glium::{glutin, implement_vertex, uniform, Surface};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use std::cell::RefCell;
 use std::env;
-use std::rc::Rc;
 use std::sync::mpsc::channel;
 use std::thread;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 fn watch(path: std::path::PathBuf, sender: std::sync::mpsc::Sender<notify::DebouncedEvent>) {
     let (tx, rx) = channel();
@@ -87,8 +83,7 @@ struct PipelineState<B: Backend> {
     device: std::rc::Rc<RefCell<renderer::DeviceState<B>>>,
 }
 
-//TODO: call this function using ptr, shaders etc...
-#[allow(dead_code)]
+//TODO: move this func?
 unsafe fn reset_pipeline<B: Backend>(
     vert_spirv: Vec<u8>,
     frag_spirv: Vec<u8>,
@@ -144,7 +139,23 @@ unsafe fn reset_pipeline<B: Backend>(
         .blender
         .targets
         .push(ColorBlendDesc(ColorMask::ALL, BlendState::ALPHA));
+    //TODO: Fix pipeline vertex attribs
 
+    pipeline_desc
+        .vertex_buffers
+        .push(gfx_hal::pso::VertexBufferDesc {
+            binding: 0,
+            stride: std::mem::size_of::<math::Vec3>() as u32,
+            rate: 0,
+        });
+    pipeline_desc.attributes.push(AttributeDesc {
+        location: 0,
+        binding: 0,
+        element: Element {
+            format: gfx_hal::format::Format::Rgb32Float,
+            offset: 0,
+        },
+    });
     device
         .create_graphics_pipeline(&pipeline_desc, None)
         .expect("Could not create graphics pipeline.")
@@ -185,7 +196,7 @@ fn main() {
             WINDOW_DIMENSIONS.width as i32,
             WINDOW_DIMENSIONS.height as i32,
         ),
-        "TestWindow".to_owned(),
+        "Playground_Window".to_owned(),
     );
     let (mut backend_state, _instance, mut adapter_state) =
         renderer::states::create_backend(&mut window_state);
@@ -197,6 +208,7 @@ fn main() {
 
     let device = &device_state.device;
     let physical_device = &device_state.physical_device;
+    let memory_types = physical_device.memory_properties().memory_types;
 
     let mut command_pool = unsafe {
         device.create_command_pool_typed(&device_state.queues, CommandPoolCreateFlags::empty())
@@ -249,7 +261,7 @@ fn main() {
         unsafe { device.create_swapchain(&mut backend_state.surface, swap_config, None) }
             .expect("Could not create swapchain");
 
-    let (frame_views, framebuffers) = match backbuffer {
+    let (_frame_views, framebuffers) = match backbuffer {
         Backbuffer::Images(images) => {
             let color_range = SubresourceRange {
                 aspects: Aspects::COLOR,
@@ -290,19 +302,54 @@ fn main() {
         Backbuffer::Framebuffer(fbo) => (vec![], vec![fbo]),
     };
 
+    let TRIANGLE : [math::Vec3; 3] = 
+    [
+        math::Vec3::new(0.5, 0.5, 0.0), 
+        math::Vec3::new(0.75, 0.0, 0.0), 
+        math::Vec3::new(0.25, 0.0, 0.0)
+    ];
+
+    let buffer_stride = std::mem::size_of::<math::Vec3>() as u64;
+    let buffer_len = TRIANGLE.len() as u64 * buffer_stride;
+    let mut vertex_buffer =
+        unsafe { device.create_buffer(buffer_len, buffer::Usage::VERTEX) }.unwrap();
+
+    let buffer_req = unsafe { device.get_buffer_requirements(&vertex_buffer) };
+
+    let upload_type = memory_types
+        .iter()
+        .enumerate()
+        .position(|(id, mem_type)| {
+            // type_mask is a bit field where each bit represents a memory type. If the bit is set
+            // to 1 it means we can use that type for our buffer. So this code finds the first
+            // memory type that has a `1` (or, is allowed), and is visible to the CPU.
+            buffer_req.type_mask & (1 << id) != 0
+                && mem_type.properties.contains(gfx_hal::memory::Properties::CPU_VISIBLE)
+        })
+        .unwrap()
+        .into();
+
+    let buffer_memory = unsafe { device.allocate_memory(upload_type, buffer_req.size) }.unwrap();
+
+    unsafe { device.bind_buffer_memory(&buffer_memory, 0, &mut vertex_buffer) }.unwrap();
+
+    // TODO: check transitions: read/write mapping and vertex buffer read
+    unsafe {
+        let mut vertices = device
+            .acquire_mapping_writer::<math::Vec3>(&buffer_memory, 0..buffer_req.size)
+            .unwrap();
+        vertices[0..TRIANGLE.len()].copy_from_slice(&TRIANGLE);
+        device.release_mapping_writer(vertices).unwrap();
+    }
+
     // The frame semaphore is used to allow us to wait for an image to be ready
     // before attempting to draw on it,
     //
     // The frame fence is used to to allow us to wait until our draw commands have
     // finished before attempting to display the image.
     let mut frame_semaphore = device.create_semaphore().unwrap();
-    let mut frame_fence = device.create_fence(false).expect("Can't create fence"); // TODO: remove
-    let present_semaphore = device.create_semaphore().unwrap();
     let mut recreate_swapchain = false;
-    let mut resize_dims = Extent2D {
-        width: 0,
-        height: 0,
-    };
+    let mut frame_fence = device.create_fence(false).expect("Can't create fence");
     let mut quitting = false;
     while quitting == false {
         match rx.try_recv() {
@@ -387,6 +434,7 @@ fn main() {
 
             // Choose a pipeline to use.
             cmd_buffer.bind_graphics_pipeline(&pipeline);
+            cmd_buffer.bind_vertex_buffers(0, Some((&vertex_buffer, 0)));
             {
                 // Clear the screen and begin the render pass.
                 let mut encoder = cmd_buffer.begin_render_pass_inline(
@@ -440,6 +488,6 @@ fn main() {
         device.destroy_swapchain(swapchain);
     }
     //How do we join our threads?
-    //Just don't mind as the OS handles this?
+    //Just don't mind as the OS handles this! ...for now and forever, this is a hobby project, what do you expect?
     // child.join().unwrap();
 }
