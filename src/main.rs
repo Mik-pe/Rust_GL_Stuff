@@ -34,7 +34,7 @@ use std::cell::RefCell;
 use std::env;
 use std::sync::mpsc::channel;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 fn watch(path: std::path::PathBuf, sender: std::sync::mpsc::Sender<notify::DebouncedEvent>) {
     let (tx, rx) = channel();
@@ -308,16 +308,15 @@ fn main() {
         math::Vec3::new(-0.1, 0.0, 0.0),
     ];
     let mut positions = vec![];
-    for particle in my_emitter.particle_list {
+    let mut some_triangles = vec![];
+    for particle in &my_emitter.particle_list {
         positions.push(particle.position.clone());
     }
-    let mut some_triangles = vec![];
-    for pos in positions {
+    for pos in &positions {
         some_triangles.push(pos.add(&triangle[0]));
         some_triangles.push(pos.add(&triangle[1]));
         some_triangles.push(pos.add(&triangle[2]));
     }
-    dbg!(&some_triangles);
 
     let buffer_stride = std::mem::size_of::<math::Vec3>() as u64;
     let buffer_len = some_triangles.len() as u64 * buffer_stride;
@@ -345,15 +344,6 @@ fn main() {
 
     unsafe { device.bind_buffer_memory(&buffer_memory, 0, &mut vertex_buffer) }.unwrap();
 
-    // TODO: check transitions: read/write mapping and vertex buffer read
-    unsafe {
-        let mut vertices = device
-            .acquire_mapping_writer::<math::Vec3>(&buffer_memory, 0..buffer_req.size)
-            .unwrap();
-        vertices[0..some_triangles.len()].copy_from_slice(&some_triangles);
-        device.release_mapping_writer(vertices).unwrap();
-    }
-
     // The frame semaphore is used to allow us to wait for an image to be ready
     // before attempting to draw on it,
     //
@@ -363,7 +353,34 @@ fn main() {
     let mut recreate_swapchain = false;
     let mut frame_fence = device.create_fence(false).expect("Can't create fence");
     let mut quitting = false;
+
+    let mut last_frame_time = SystemTime::now();
+
     while quitting == false {
+        let this_frame_time = SystemTime::now();
+        let delta_time = last_frame_time.elapsed().unwrap() - this_frame_time.elapsed().unwrap();
+        last_frame_time = this_frame_time;
+        my_emitter.tick(((delta_time.as_micros() as f64) / 1_000_000.0) as f32);
+        positions.clear();
+        some_triangles.clear();
+        for particle in &my_emitter.particle_list {
+            positions.push(particle.position.clone());
+        }
+        for pos in &positions {
+            some_triangles.push(pos.add(&triangle[0]));
+            some_triangles.push(pos.add(&triangle[1]));
+            some_triangles.push(pos.add(&triangle[2]));
+        }
+        dbg!(&positions[0]);
+        // TODO: check transitions: read/write mapping and vertex buffer read
+        unsafe {
+            let mut vertices = device
+                .acquire_mapping_writer::<math::Vec3>(&buffer_memory, 0..buffer_req.size)
+                .unwrap();
+            vertices[0..some_triangles.len()].copy_from_slice(&some_triangles);
+            device.release_mapping_writer(vertices).unwrap();
+        }
+
         match rx.try_recv() {
             Ok(event) => match event {
                 notify::DebouncedEvent::Write(_watched_path) => {
