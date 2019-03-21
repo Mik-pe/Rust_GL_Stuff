@@ -12,10 +12,10 @@ use gfx_backend_vulkan as backend;
 use gfx_hal::{
     adapter::PhysicalDevice,
     buffer,
-    memory,
     command::{ClearColor, ClearValue},
     format::{Aspects, ChannelType, Format, Swizzle},
     image::{SubresourceRange, ViewKind},
+    memory,
     pass::Subpass,
     pool::CommandPoolCreateFlags,
     pso::{
@@ -168,7 +168,7 @@ const WINDOW_DIMENSIONS: Extent2D = Extent2D {
 
 fn main() {
     //TODO MATH STUFF:
-    let mut _my_emitter = particles::Emitter::new(20);
+    let mut my_emitter = particles::Emitter::new(20);
     let some_vec = math::Vec3::new(0.0, 1.0, 2.0);
     let some_other_vec = math::Vec3::new(0.0, 1.0, 2.0);
     let some_third_vec = some_vec.add(&some_other_vec);
@@ -302,15 +302,25 @@ fn main() {
         Backbuffer::Framebuffer(fbo) => (vec![], vec![fbo]),
     };
 
-    let TRIANGLE : [math::Vec3; 3] = 
-    [
-        math::Vec3::new(0.5, 0.5, 0.0), 
-        math::Vec3::new(0.75, 0.0, 0.0), 
-        math::Vec3::new(0.25, 0.0, 0.0)
+    let triangle: [math::Vec3; 3] = [
+        math::Vec3::new(0.0, 0.1, 0.0),
+        math::Vec3::new(0.1, 0.0, 0.0),
+        math::Vec3::new(-0.1, 0.0, 0.0),
     ];
+    let mut positions = vec![];
+    for particle in my_emitter.particle_list {
+        positions.push(particle.position.clone());
+    }
+    let mut some_triangles = vec![];
+    for pos in positions {
+        some_triangles.push(pos.add(&triangle[0]));
+        some_triangles.push(pos.add(&triangle[1]));
+        some_triangles.push(pos.add(&triangle[2]));
+    }
+    dbg!(&some_triangles);
 
     let buffer_stride = std::mem::size_of::<math::Vec3>() as u64;
-    let buffer_len = TRIANGLE.len() as u64 * buffer_stride;
+    let buffer_len = some_triangles.len() as u64 * buffer_stride;
     let mut vertex_buffer =
         unsafe { device.create_buffer(buffer_len, buffer::Usage::VERTEX) }.unwrap();
 
@@ -324,7 +334,9 @@ fn main() {
             // to 1 it means we can use that type for our buffer. So this code finds the first
             // memory type that has a `1` (or, is allowed), and is visible to the CPU.
             buffer_req.type_mask & (1 << id) != 0
-                && mem_type.properties.contains(gfx_hal::memory::Properties::CPU_VISIBLE)
+                && mem_type
+                    .properties
+                    .contains(gfx_hal::memory::Properties::CPU_VISIBLE)
         })
         .unwrap()
         .into();
@@ -338,7 +350,7 @@ fn main() {
         let mut vertices = device
             .acquire_mapping_writer::<math::Vec3>(&buffer_memory, 0..buffer_req.size)
             .unwrap();
-        vertices[0..TRIANGLE.len()].copy_from_slice(&TRIANGLE);
+        vertices[0..some_triangles.len()].copy_from_slice(&some_triangles);
         device.release_mapping_writer(vertices).unwrap();
     }
 
@@ -445,7 +457,7 @@ fn main() {
                 );
 
                 //Shader has 3 vertices, indexlist is 0..1
-                encoder.draw(0..3, 0..1);
+                encoder.draw(0..some_triangles.len() as u32, 0..1);
             }
 
             // Finish building the command buffer - it's now ready to send to the GPU.

@@ -3,7 +3,7 @@ use crate::math::Vec3;
 
 #[derive(Debug)]
 pub struct Emitter {
-    particle_list: Vec<Particle>,
+    pub particle_list: Vec<Particle>,
     origin: Vec3,
 }
 

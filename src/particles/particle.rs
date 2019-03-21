@@ -2,7 +2,7 @@ use crate::math::Vec3;
 
 #[derive(Debug)]
 pub struct Particle {
-    position: Vec3,
+    pub position: Vec3,
     death_time: f32,
     life_time: f32,
 }
@@ -10,7 +10,7 @@ pub struct Particle {
 impl Particle {
     pub fn new() -> Particle {
         Particle {
-            position: Vec3::new(0.0, 0.0, 0.0),
+            position: Vec3::new(rand::random::<f32>(), rand::random::<f32>(), 0.0),
             death_time: rand::random::<f32>(),
             life_time: 0.0,
         }
