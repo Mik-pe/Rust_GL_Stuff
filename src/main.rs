@@ -168,7 +168,7 @@ const WINDOW_DIMENSIONS: Extent2D = Extent2D {
 
 fn main() {
     //TODO MATH STUFF:
-    let mut my_emitter = particles::Emitter::new(20);
+    let mut my_emitter = particles::Emitter::new(4500);
     let some_vec = math::Vec3::new(0.0, 1.0, 2.0);
     let some_other_vec = math::Vec3::new(0.0, 1.0, 2.0);
     let some_third_vec = some_vec.add(&some_other_vec);
@@ -307,12 +307,12 @@ fn main() {
         math::Vec3::new(0.1, 0.0, 0.0),
         math::Vec3::new(-0.1, 0.0, 0.0),
     ];
-    let mut positions = vec![];
+    let mut pos_rots = vec![];
     let mut some_triangles = vec![];
     for particle in &my_emitter.particle_list {
-        positions.push(particle.position.clone());
+        pos_rots.push((particle.position.clone(), particle.rotation.clone()));
     }
-    for pos in &positions {
+    for (pos, _rot) in &pos_rots {
         some_triangles.push(pos.add(&triangle[0]));
         some_triangles.push(pos.add(&triangle[1]));
         some_triangles.push(pos.add(&triangle[2]));
@@ -361,17 +361,25 @@ fn main() {
         let delta_time = last_frame_time.elapsed().unwrap() - this_frame_time.elapsed().unwrap();
         last_frame_time = this_frame_time;
         my_emitter.tick(((delta_time.as_micros() as f64) / 1_000_000.0) as f32);
-        positions.clear();
+        pos_rots.clear();
         some_triangles.clear();
         for particle in &my_emitter.particle_list {
-            positions.push(particle.position.clone());
+            pos_rots.push((particle.position.clone(), particle.rotation.clone()));
         }
-        for pos in &positions {
-            some_triangles.push(pos.add(&triangle[0]));
-            some_triangles.push(pos.add(&triangle[1]));
-            some_triangles.push(pos.add(&triangle[2]));
+        for (pos, rot) in &pos_rots {
+            let rotmat = math::Mat4::from_rotaxis(rot, [0.0, 0.0, -1.0]);
+            let mut local_triangle = [
+                triangle[0].clone(),
+                triangle[1].clone(),
+                triangle[2].clone(),
+            ];
+            for vert in &mut local_triangle {
+                *vert = math::mat4_mul_vec3(&rotmat, &vert);
+            }
+            some_triangles.push(pos.add(&local_triangle[0]));
+            some_triangles.push(pos.add(&local_triangle[1]));
+            some_triangles.push(pos.add(&local_triangle[2]));
         }
-        dbg!(&positions[0]);
         // TODO: check transitions: read/write mapping and vertex buffer read
         unsafe {
             let mut vertices = device

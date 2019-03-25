@@ -16,8 +16,8 @@ pub fn mat4_mul_vec3(a: &Mat4, b: &Vec3) -> Vec3 {
     //TODO: Don't create a new object here:
     Vec3([
         b.dot(Vec3([row0[0], row0[1], row0[2]])) + row0[3],
-        b.dot(Vec3([row2[0], row2[1], row2[2]])) + row2[3],
         b.dot(Vec3([row1[0], row1[1], row1[2]])) + row1[3],
+        b.dot(Vec3([row2[0], row2[1], row2[2]])) + row2[3],
     ])
 }
 

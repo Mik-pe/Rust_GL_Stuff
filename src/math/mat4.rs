@@ -63,7 +63,7 @@ impl Mat4 {
         ])
     }
 
-    pub fn from_rotaxis(angle: f32, axis: [f32; 3]) -> Mat4 {
+    pub fn from_rotaxis(angle: &f32, axis: [f32; 3]) -> Mat4 {
         let cos_part = angle.cos();
         let sin_part = angle.sin();
         let one_sub_cos = 1.0 - cos_part;
