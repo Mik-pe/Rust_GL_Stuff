@@ -59,7 +59,7 @@ pub fn create_backend(
         let builder =
             back::config_context(back::glutin::ContextBuilder::new(), ColorFormat::SELF, None)
                 .with_vsync(true);
-        back::glutin::GlWindow::new(
+        back::glutin::WindowedContext::new_windowed(
             window_state.wb.take().unwrap(),
             builder,
             &window_state.events_loop,

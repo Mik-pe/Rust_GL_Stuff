@@ -22,7 +22,7 @@ impl Emitter {
 
     pub fn tick(&mut self, delta_time: f32) {
         for particle in &mut self.particle_list {
-            particle.update(Vec3::new(0.003, 0.0, 0.0), &delta_time);
+            particle.update(Vec3::new(-0.003, 0.0, 0.0), &delta_time);
         }
     }
 }

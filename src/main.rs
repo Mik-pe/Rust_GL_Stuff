@@ -24,7 +24,7 @@ use gfx_hal::{
     },
     queue::Submission,
     window::Extent2D,
-    Backbuffer, Backend, Device, FrameSync, Primitive, Surface, Swapchain, SwapchainConfig,
+    Backend, Device, Primitive, Surface, Swapchain, SwapchainConfig,
 };
 use glsl_to_spirv::ShaderType;
 use winit::{Event, KeyboardInput, VirtualKeyCode, WindowEvent};
@@ -35,6 +35,12 @@ use std::env;
 use std::sync::mpsc::channel;
 use std::thread;
 use std::time::{Duration, SystemTime};
+
+const COLOR_RANGE: SubresourceRange = SubresourceRange {
+    aspects: Aspects::COLOR,
+    levels: 0..1,
+    layers: 0..1,
+};
 
 fn watch(path: std::path::PathBuf, sender: std::sync::mpsc::Sender<notify::DebouncedEvent>) {
     let (tx, rx) = channel();
@@ -146,13 +152,13 @@ unsafe fn reset_pipeline<B: Backend>(
         .push(gfx_hal::pso::VertexBufferDesc {
             binding: 0,
             stride: std::mem::size_of::<math::Vec3>() as u32,
-            rate: 0,
+            rate: gfx_hal::pso::VertexInputRate::Vertex,
         });
     pipeline_desc.attributes.push(AttributeDesc {
         location: 0,
         binding: 0,
         element: Element {
-            format: gfx_hal::format::Format::Rgb32Float,
+            format: gfx_hal::format::Format::Rgb32Sfloat,
             offset: 0,
         },
     });
@@ -168,7 +174,7 @@ const WINDOW_DIMENSIONS: Extent2D = Extent2D {
 
 fn main() {
     //TODO MATH STUFF:
-    let mut my_emitter = particles::Emitter::new(4500);
+    let mut my_emitter = particles::Emitter::new(40);
     let some_vec = math::Vec3::new(0.0, 1.0, 2.0);
     let some_other_vec = math::Vec3::new(0.0, 1.0, 2.0);
     let some_third_vec = some_vec.add(&some_other_vec);
@@ -215,7 +221,8 @@ fn main() {
     }
     .expect("Can't create command pool");
 
-    let (caps, formats, _, _) = backend_state.surface.compatibility(physical_device);
+    let queue_group = &mut device_state.queues;
+    let (caps, formats, _) = backend_state.surface.compatibility(physical_device);
 
     let surface_color_format = {
         // We must pick a color format from the list of supported formats. If there
@@ -261,51 +268,89 @@ fn main() {
         unsafe { device.create_swapchain(&mut backend_state.surface, swap_config, None) }
             .expect("Could not create swapchain");
 
-    let (_frame_views, framebuffers) = match backbuffer {
-        Backbuffer::Images(images) => {
-            let color_range = SubresourceRange {
-                aspects: Aspects::COLOR,
-                levels: 0..1,
-                layers: 0..1,
-            };
-
-            let image_views = images
-                .iter()
-                .map(|image| {
-                    unsafe {
-                        device.create_image_view(
-                            image,
-                            ViewKind::D2,
-                            surface_color_format,
-                            Swizzle::NO,
-                            color_range.clone(),
-                        )
-                    }
-                    .expect("Could not create image view")
-                })
-                .collect::<Vec<_>>();
-
-            let fbos = image_views
-                .iter()
-                .map(|image_view| {
-                    unsafe { device.create_framebuffer(&fullscreen_pass, vec![image_view], extent) }
-                        .expect("Could not create framebuffer")
-                })
-                .collect();
-
-            (image_views, fbos)
-        }
-
-        // This arm of the branch is currently only used by the OpenGL backend,
-        // which supplies an opaque framebuffer for you instead of giving you control
-        // over individual images.
-        Backbuffer::Framebuffer(fbo) => (vec![], vec![fbo]),
+    let (mut frame_images, mut framebuffers) = {
+        let pairs = backbuffer
+            .into_iter()
+            .map(|image| unsafe {
+                let rtv = device
+                    .create_image_view(
+                        &image,
+                        ViewKind::D2,
+                        surface_color_format,
+                        Swizzle::NO,
+                        COLOR_RANGE.clone(),
+                    )
+                    .unwrap();
+                (image, rtv)
+            })
+            .collect::<Vec<_>>();
+        let fbos = pairs
+            .iter()
+            .map(|&(_, ref rtv)| unsafe {
+                device
+                    .create_framebuffer(&fullscreen_pass, Some(rtv), extent)
+                    .unwrap()
+            })
+            .collect::<Vec<_>>();
+        (pairs, fbos)
     };
+    let frames_in_flight = 3;
+
+    // Number of image acquisition semaphores is based on the number of swapchain images, not frames in flight,
+    // plus one extra which we can guarantee is unused at any given time by swapping it out with the ones
+    // in the rest of the queue.
+    let mut image_acquire_semaphores = Vec::with_capacity(frame_images.len());
+    let mut free_acquire_semaphore = device
+        .create_semaphore()
+        .expect("Could not create semaphore");
+
+    // The number of the rest of the resources is based on the frames in flight.
+    let mut submission_complete_semaphores = Vec::with_capacity(frames_in_flight);
+    let mut submission_complete_fences = Vec::with_capacity(frames_in_flight);
+    // Note: We don't really need a different command pool per frame in such a simple demo like this,
+    let mut cmd_pools = Vec::with_capacity(frames_in_flight);
+    let mut cmd_buffers = Vec::with_capacity(frames_in_flight);
+
+    cmd_pools.push(command_pool);
+    for _ in 1..frames_in_flight {
+        unsafe {
+            cmd_pools.push(
+                device
+                    .create_command_pool_typed(
+                        &queue_group,
+                        gfx_hal::pool::CommandPoolCreateFlags::empty(),
+                    )
+                    .expect("Can't create command pool"),
+            );
+        }
+    }
+
+    for _ in 0..frame_images.len() {
+        image_acquire_semaphores.push(
+            device
+                .create_semaphore()
+                .expect("Could not create semaphore"),
+        );
+    }
+
+    for i in 0..frames_in_flight {
+        submission_complete_semaphores.push(
+            device
+                .create_semaphore()
+                .expect("Could not create semaphore"),
+        );
+        submission_complete_fences.push(
+            device
+                .create_fence(true)
+                .expect("Could not create semaphore"),
+        );
+        cmd_buffers.push(cmd_pools[i].acquire_command_buffer::<gfx_hal::command::MultiShot>());
+    }
 
     let triangle: [math::Vec3; 3] = [
         math::Vec3::new(0.0, 0.1, 0.0),
-        math::Vec3::new(0.1, 0.0, 0.0),
-        math::Vec3::new(-0.1, 0.0, 0.0),
+        math::Vec3::new(0.05, 0.0, 0.0),
+        math::Vec3::new(-0.05, 0.0, 0.0),
     ];
     let mut pos_rots = vec![];
     let mut some_triangles = vec![];
@@ -355,6 +400,16 @@ fn main() {
     let mut quitting = false;
 
     let mut last_frame_time = SystemTime::now();
+    let mut frame: u64 = 0;
+    let viewport = Viewport {
+        rect: Rect {
+            x: 0,
+            y: 0,
+            w: extent.width as i16,
+            h: extent.height as i16,
+        },
+        depth: 0.0..1.0,
+    };
 
     while quitting == false {
         let this_frame_time = SystemTime::now();
@@ -438,79 +493,91 @@ fn main() {
             println!("Should quit!");
         }
 
-        let frame: gfx_hal::SwapImageIndex = unsafe {
-            device.reset_fence(&frame_fence).unwrap();
-            command_pool.reset();
-            match swapchain.acquire_image(!0, FrameSync::Semaphore(&mut frame_semaphore)) {
-                Ok(i) => i,
+        let swap_image = unsafe {
+            match swapchain.acquire_image(!0, Some(&free_acquire_semaphore), None) {
+                Ok((i, _)) => i as usize,
                 Err(_) => {
                     recreate_swapchain = true;
                     continue;
                 }
             }
         };
+        // Swap the acquire semaphore with the one previously associated with the image we are acquiring
+        core::mem::swap(
+            &mut free_acquire_semaphore,
+            &mut image_acquire_semaphores[swap_image],
+        );
+        // Compute index into our resource ring buffers based on the frame number
+        // and number of frames in flight. Pay close attention to where this index is needed
+        // versus when the swapchain image index we got from acquire_image is needed.
+        let frame_idx = frame as usize % frames_in_flight;
 
-        let mut cmd_buffer = command_pool.acquire_command_buffer::<gfx_hal::command::OneShot>();
+        // Wait for the fence of the previous submission of this frame and reset it; ensures we are
+        // submitting only up to maximum number of frames_in_flight if we are submitting faster than
+        // the gpu can keep up with. This would also guarantee that any resources which need to be
+        // updated with a CPU->GPU data copy are not in use by the GPU, so we can perform those updates.
+        // In this case there are none to be done, however.
         unsafe {
-            cmd_buffer.begin();
-
-            // Define a rectangle on screen to draw into.
-            // In this case, the whole screen.
-            let viewport = Viewport {
-                rect: Rect {
-                    x: 0,
-                    y: 0,
-                    w: extent.width as i16,
-                    h: extent.height as i16,
-                },
-                depth: 0.0..1.0,
-            };
+            device
+                .wait_for_fence(&submission_complete_fences[frame_idx], !0)
+                .expect("Failed to wait for fence");
+            device
+                .reset_fence(&submission_complete_fences[frame_idx])
+                .expect("Failed to reset fence");
+            cmd_pools[frame_idx].reset();
+        }
+        // Rendering
+        let cmd_buffer = &mut cmd_buffers[frame_idx];
+        unsafe {
+            cmd_buffer.begin(false);
 
             cmd_buffer.set_viewports(0, &[viewport.clone()]);
             cmd_buffer.set_scissors(0, &[viewport.rect]);
-
-            // Choose a pipeline to use.
             cmd_buffer.bind_graphics_pipeline(&pipeline);
             cmd_buffer.bind_vertex_buffers(0, Some((&vertex_buffer, 0)));
+            // cmd_buffer.bind_graphics_descriptor_sets(&pipeline_layout, 0, Some(&desc_set), &[]);
+
             {
-                // Clear the screen and begin the render pass.
                 let mut encoder = cmd_buffer.begin_render_pass_inline(
                     &fullscreen_pass,
-                    &framebuffers[frame as usize],
+                    &framebuffers[swap_image],
                     viewport.rect,
-                    &[ClearValue::Color(ClearColor::Float([0.0, 0.0, 0.0, 1.0]))],
+                    &[gfx_hal::command::ClearValue::Color(
+                        gfx_hal::command::ClearColor::Float([0.0, 0.0, 0.0, 1.0]),
+                    )],
                 );
-
-                //Shader has 3 vertices, indexlist is 0..1
                 encoder.draw(0..some_triangles.len() as u32, 0..1);
             }
 
-            // Finish building the command buffer - it's now ready to send to the GPU.
             cmd_buffer.finish();
+
             let submission = Submission {
-                command_buffers: Some(&cmd_buffer),
-                wait_semaphores: Some((&frame_semaphore, PipelineStage::BOTTOM_OF_PIPE)),
-                signal_semaphores: &[],
+                command_buffers: Some(&*cmd_buffer),
+                wait_semaphores: Some((
+                    &image_acquire_semaphores[swap_image],
+                    PipelineStage::COLOR_ATTACHMENT_OUTPUT,
+                )),
+                signal_semaphores: Some(&submission_complete_semaphores[frame_idx]),
             };
-
-            device_state.queues.queues[0].submit(submission, Some(&mut frame_fence));
-
-            // TODO: replace with semaphore
-            device.wait_for_fence(&frame_fence, !0).unwrap();
-            command_pool.free(Some(cmd_buffer));
+            queue_group.queues[0].submit(submission, Some(&submission_complete_fences[frame_idx]));
 
             // present frame
-            if let Err(_) =
-                swapchain.present_nosemaphores(&mut device_state.queues.queues[0], frame)
-            {
+            if let Err(_) = swapchain.present(
+                &mut queue_group.queues[0],
+                swap_image as gfx_hal::SwapImageIndex,
+                Some(&submission_complete_semaphores[frame_idx]),
+            ) {
                 recreate_swapchain = true;
             }
         }
+        frame += 1;
     }
 
     device.wait_idle().unwrap();
     unsafe {
-        device.destroy_command_pool(command_pool.into_raw());
+        for pool in cmd_pools {
+            device.destroy_command_pool(pool.into_raw());
+        }
 
         device.destroy_fence(frame_fence);
         device.destroy_semaphore(frame_semaphore);

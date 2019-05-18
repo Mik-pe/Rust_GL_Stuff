@@ -22,6 +22,7 @@ impl Particle {
 
     pub fn update(&mut self, new_position: Vec3, delta_time: &f32) {
         self.position = self.position.add(&new_position);
+        self.rotation += 0.01;
         self.life_time += delta_time;
         if self.life_time > self.death_time {
             *self = Self::new();
