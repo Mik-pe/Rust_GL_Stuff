@@ -44,6 +44,15 @@ impl Index<usize> for Mat4 {
 
 //Mat4 is considered a column-major matrix
 impl Mat4 {
+    pub fn new() -> Mat4 {
+        Mat4([
+            Vec4([1.0, 0.0, 0.0, 0.0]),
+            Vec4([0.0, 1.0, 0.0, 0.0]),
+            Vec4([0.0, 0.0, 1.0, 0.0]),
+            Vec4([0.0, 0.0, 0.0, 1.0]),
+        ])
+    }
+
     pub fn from_translation(pos: [f32; 3]) -> Mat4 {
         Mat4([
             Vec4([1.0, 0.0, 0.0, 0.0]),

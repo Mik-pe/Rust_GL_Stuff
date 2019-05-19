@@ -184,6 +184,8 @@ fn main() {
     let third_mat4 = some_mat4.mul(&some_other_mat4);
     let _multiplied_vec = math::mat4_mul_vec3(&third_mat4, &some_third_vec);
     let _multiplied_vec4 = math::mat4_mul_vec4(&third_mat4, &some_vec4);
+    let _view_matrix = math::Mat4::new();
+    let _proj_matrix = math::Mat4::new();
     //TODO MATH STUFF
 
     let (tx, rx) = channel();
@@ -386,21 +388,14 @@ fn main() {
         .into();
 
     let buffer_memory = unsafe { device.allocate_memory(upload_type, buffer_req.size) }.unwrap();
-
     unsafe { device.bind_buffer_memory(&buffer_memory, 0, &mut vertex_buffer) }.unwrap();
 
-    // The frame semaphore is used to allow us to wait for an image to be ready
-    // before attempting to draw on it,
-    //
-    // The frame fence is used to to allow us to wait until our draw commands have
-    // finished before attempting to display the image.
-    let mut frame_semaphore = device.create_semaphore().unwrap();
     let mut recreate_swapchain = false;
-    let mut frame_fence = device.create_fence(false).expect("Can't create fence");
     let mut quitting = false;
 
     let mut last_frame_time = SystemTime::now();
     let mut frame: u64 = 0;
+
     let viewport = Viewport {
         rect: Rect {
             x: 0,
@@ -444,6 +439,7 @@ fn main() {
             device.release_mapping_writer(vertices).unwrap();
         }
 
+        //TODO: Move this:
         match rx.try_recv() {
             Ok(event) => match event {
                 notify::DebouncedEvent::Write(_watched_path) => {
@@ -507,9 +503,7 @@ fn main() {
             &mut free_acquire_semaphore,
             &mut image_acquire_semaphores[swap_image],
         );
-        // Compute index into our resource ring buffers based on the frame number
-        // and number of frames in flight. Pay close attention to where this index is needed
-        // versus when the swapchain image index we got from acquire_image is needed.
+
         let frame_idx = frame as usize % frames_in_flight;
 
         // Wait for the fence of the previous submission of this frame and reset it; ensures we are
@@ -535,6 +529,8 @@ fn main() {
             cmd_buffer.set_scissors(0, &[viewport.rect]);
             cmd_buffer.bind_graphics_pipeline(&pipeline);
             cmd_buffer.bind_vertex_buffers(0, Some((&vertex_buffer, 0)));
+            //TODO: Fix descriptor sets:
+            //Handle normalized viewspace coordinates better!
             // cmd_buffer.bind_graphics_descriptor_sets(&pipeline_layout, 0, Some(&desc_set), &[]);
 
             {
@@ -579,12 +575,10 @@ fn main() {
             device.destroy_command_pool(pool.into_raw());
         }
 
-        device.destroy_fence(frame_fence);
-        device.destroy_semaphore(frame_semaphore);
         device.destroy_render_pass(fullscreen_pass);
-
         device.destroy_graphics_pipeline(pipeline);
         device.destroy_pipeline_layout(pipeline_layout);
+
         for framebuffer in framebuffers {
             device.destroy_framebuffer(framebuffer);
         }
