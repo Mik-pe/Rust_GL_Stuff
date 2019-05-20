@@ -18,13 +18,15 @@ use gfx_hal::{
     memory,
     pass::Subpass,
     pool::CommandPoolCreateFlags,
+    pso,
     pso::{
-        AttributeDesc, BlendState, ColorBlendDesc, ColorMask, Element, EntryPoint,
-        GraphicsPipelineDesc, GraphicsShaderSet, PipelineStage, Rasterizer, Rect, Viewport,
+        AttributeDesc, BlendState, ColorBlendDesc, ColorMask, DescriptorRangeDesc, Element,
+        EntryPoint, GraphicsPipelineDesc, GraphicsShaderSet, PipelineStage, Rasterizer, Rect,
+        ShaderStageFlags, Viewport,
     },
     queue::Submission,
     window::Extent2D,
-    Backend, Device, Primitive, Surface, Swapchain, SwapchainConfig,
+    Backend, DescriptorPool, Device, Primitive, Surface, Swapchain, SwapchainConfig,
 };
 use glsl_to_spirv::ShaderType;
 use winit::{Event, KeyboardInput, VirtualKeyCode, WindowEvent};
@@ -184,7 +186,7 @@ fn main() {
     let third_mat4 = some_mat4.mul(&some_other_mat4);
     let _multiplied_vec = math::mat4_mul_vec3(&third_mat4, &some_third_vec);
     let _multiplied_vec4 = math::mat4_mul_vec4(&third_mat4, &some_vec4);
-    let _view_matrix = math::Mat4::new();
+    let mut view_matrix = math::Mat4::new();
     let _proj_matrix = math::Mat4::new();
     //TODO MATH STUFF
 
@@ -214,7 +216,7 @@ fn main() {
         &backend_state.surface,
     );
 
-    let device = &device_state.device;
+    let device: &backend::Device = &device_state.device;
     let physical_device = &device_state.physical_device;
     let memory_types = physical_device.memory_properties().memory_types;
 
@@ -222,6 +224,45 @@ fn main() {
         device.create_command_pool_typed(&device_state.queues, CommandPoolCreateFlags::empty())
     }
     .expect("Can't create command pool");
+
+    // Setup renderpass and pipeline
+    let set_layout = unsafe {
+        device.create_descriptor_set_layout(
+            &[pso::DescriptorSetLayoutBinding {
+                binding: 0,
+                ty: pso::DescriptorType::UniformBuffer,
+                count: 1,
+                stage_flags: ShaderStageFlags::VERTEX,
+                immutable_samplers: false,
+            }],
+            &[],
+        )
+    }
+    .expect("Can't create descriptor set layout");
+
+    // Descriptors
+    let mut desc_pool = unsafe {
+        device.create_descriptor_pool(
+            1, // sets
+            &[pso::DescriptorRangeDesc {
+                ty: pso::DescriptorType::UniformBuffer,
+                count: 1,
+            }],
+            pso::DescriptorPoolCreateFlags::empty(),
+        )
+    }
+    .expect("Can't create descriptor pool");
+
+    let desc_set = unsafe { desc_pool.allocate_set(&set_layout) }.unwrap();
+
+    let uniform_buffer = unsafe {
+        renderer::BufferState::<backend::Backend>::new(
+            &device,
+            &view_matrix.0,
+            gfx_hal::buffer::Usage::UNIFORM,
+            &adapter_state.memory_types,
+        )
+    };
 
     let queue_group = &mut device_state.queues;
     let (caps, formats, _) = backend_state.surface.compatibility(physical_device);
@@ -531,7 +572,7 @@ fn main() {
             cmd_buffer.bind_vertex_buffers(0, Some((&vertex_buffer, 0)));
             //TODO: Fix descriptor sets:
             //Handle normalized viewspace coordinates better!
-            // cmd_buffer.bind_graphics_descriptor_sets(&pipeline_layout, 0, Some(&desc_set), &[]);
+            cmd_buffer.bind_graphics_descriptor_sets(&pipeline_layout, 0, Some(&desc_set), &[]);
 
             {
                 let mut encoder = cmd_buffer.begin_render_pass_inline(

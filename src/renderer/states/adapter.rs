@@ -2,8 +2,8 @@ use gfx_hal::{Adapter, Backend, Limits, MemoryType, PhysicalDevice};
 
 pub struct AdapterState<B: Backend> {
     pub adapter: Option<Adapter<B>>,
-    memory_types: Vec<MemoryType>,
-    limits: Limits,
+    pub memory_types: Vec<MemoryType>,
+    pub limits: Limits,
 }
 
 impl<B: Backend> AdapterState<B> {
