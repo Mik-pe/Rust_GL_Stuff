@@ -390,7 +390,7 @@ fn main() {
     let buffer_memory = unsafe { device.allocate_memory(upload_type, buffer_req.size) }.unwrap();
     unsafe { device.bind_buffer_memory(&buffer_memory, 0, &mut vertex_buffer) }.unwrap();
 
-    let mut recreate_swapchain = false;
+    let mut _recreate_swapchain = false;
     let mut quitting = false;
 
     let mut last_frame_time = SystemTime::now();
@@ -493,7 +493,7 @@ fn main() {
             match swapchain.acquire_image(!0, Some(&free_acquire_semaphore), None) {
                 Ok((i, _)) => i as usize,
                 Err(_) => {
-                    recreate_swapchain = true;
+                    _recreate_swapchain = true;
                     continue;
                 }
             }
@@ -563,7 +563,7 @@ fn main() {
                 swap_image as gfx_hal::SwapImageIndex,
                 Some(&submission_complete_semaphores[frame_idx]),
             ) {
-                recreate_swapchain = true;
+                _recreate_swapchain = true;
             }
         }
         frame += 1;
