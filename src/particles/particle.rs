@@ -12,8 +12,8 @@ pub struct Particle {
 impl Particle {
     pub fn new() -> Self {
         Self {
-            position: Vec3::new(rand::random::<f32>(), rand::random::<f32>(), 0.0),
-            direction: Vec3::new(rand::random::<f32>(), rand::random::<f32>(), 0.0),
+            position: Vec3::new(640.0 * (0.5 - rand::random::<f32>()), -240.0, 0.0),
+            direction: Vec3::new(640.0 * (0.5 - rand::random::<f32>()), -240.0, 0.0),
             rotation: rand::random::<f32>(),
             death_time: rand::random::<f32>(),
             life_time: 0.0,

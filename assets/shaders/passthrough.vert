@@ -13,7 +13,5 @@ out gl_PerVertex {
 
 void main() 
 {
-	vec3 pos = a_pos;
-	pos = vec3(0.5) - pos;
-	gl_Position = vec4(pos, 1.0);
+	gl_Position = vec4(a_pos, 1.0);
 }

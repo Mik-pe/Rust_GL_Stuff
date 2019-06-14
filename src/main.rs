@@ -176,7 +176,7 @@ const WINDOW_DIMENSIONS: Extent2D = Extent2D {
 
 fn main() {
     //TODO MATH STUFF:
-    let mut my_emitter = particles::Emitter::new(40);
+    let mut my_emitter = particles::Emitter::new(4000);
     let some_vec = math::Vec3::new(0.0, 1.0, 2.0);
     let some_other_vec = math::Vec3::new(0.0, 1.0, 2.0);
     let some_third_vec = some_vec.add(&some_other_vec);
@@ -186,11 +186,11 @@ fn main() {
     let third_mat4 = some_mat4.mul(&some_other_mat4);
     let _multiplied_vec = math::mat4_mul_vec3(&third_mat4, &some_third_vec);
     let _multiplied_vec4 = math::mat4_mul_vec4(&third_mat4, &some_vec4);
-    let mut view_matrix = math::Mat4::new();
+    let mut _view_matrix = math::Mat4::new();
     let top = WINDOW_DIMENSIONS.height as f32 / 2.0;
     let right = WINDOW_DIMENSIONS.width as f32 / 2.0;
 
-    let mut _proj_matrix = math::Mat4::create_ortho(-top, top, -right, right, 0.1, 1000.0);
+    let mut proj_matrix = math::Mat4::create_ortho(-top, top, -right, right, 0.1, 1000.0);
     //TODO MATH STUFF
 
     let (tx, rx) = channel();
@@ -261,7 +261,7 @@ fn main() {
     let uniform_buffer = unsafe {
         renderer::BufferState::<backend::Backend>::new(
             &device,
-            &view_matrix.0,
+            &proj_matrix.0,
             gfx_hal::buffer::Usage::UNIFORM,
             &adapter_state.memory_types,
         )
@@ -392,11 +392,11 @@ fn main() {
         );
         cmd_buffers.push(cmd_pools[i].acquire_command_buffer::<gfx_hal::command::MultiShot>());
     }
-
+    let scale = 5.0;
     let triangle: [math::Vec3; 3] = [
-        math::Vec3::new(0.0, 0.1, 0.0),
-        math::Vec3::new(0.05, 0.0, 0.0),
-        math::Vec3::new(-0.05, 0.0, 0.0),
+        math::Vec3::new(0.0, scale * 1.0, 0.0),
+        math::Vec3::new(scale * 0.5, 0.0, 0.0),
+        math::Vec3::new(scale * -0.5, 0.0, 0.0),
     ];
     let mut pos_rots = vec![];
     let mut some_triangles = vec![];
@@ -470,9 +470,18 @@ fn main() {
             for vert in &mut local_triangle {
                 *vert = math::mat4_mul_vec3(&rotmat, &vert);
             }
-            some_triangles.push(pos.add(&local_triangle[0]));
-            some_triangles.push(pos.add(&local_triangle[1]));
-            some_triangles.push(pos.add(&local_triangle[2]));
+            some_triangles.push(math::mat4_mul_vec3(
+                &proj_matrix,
+                &pos.add(&local_triangle[0]),
+            ));
+            some_triangles.push(math::mat4_mul_vec3(
+                &proj_matrix,
+                &pos.add(&local_triangle[1]),
+            ));
+            some_triangles.push(math::mat4_mul_vec3(
+                &proj_matrix,
+                &pos.add(&local_triangle[2]),
+            ));
         }
         // TODO: check transitions: read/write mapping and vertex buffer read
         unsafe {
@@ -522,7 +531,10 @@ fn main() {
                         ..
                     } => quitting = true,
                     WindowEvent::Resized(logical_size) => {
-                        dbg!(logical_size);
+                        let top = logical_size.height as f32 / 2.0;
+                        let right = logical_size.width as f32 / 2.0;
+                        proj_matrix =
+                            math::Mat4::create_ortho(-top, top, -right, right, 0.1, 1000.0);
                     }
                     _ => {}
                 }
