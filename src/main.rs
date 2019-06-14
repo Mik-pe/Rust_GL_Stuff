@@ -187,7 +187,10 @@ fn main() {
     let _multiplied_vec = math::mat4_mul_vec3(&third_mat4, &some_third_vec);
     let _multiplied_vec4 = math::mat4_mul_vec4(&third_mat4, &some_vec4);
     let mut view_matrix = math::Mat4::new();
-    let _proj_matrix = math::Mat4::new();
+    let top = WINDOW_DIMENSIONS.height as f32 / 2.0;
+    let right = WINDOW_DIMENSIONS.width as f32 / 2.0;
+
+    let mut _proj_matrix = math::Mat4::create_ortho(-top, top, -right, right, 0.1, 1000.0);
     //TODO MATH STUFF
 
     let (tx, rx) = channel();
