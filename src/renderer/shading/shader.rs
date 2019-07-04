@@ -14,12 +14,9 @@ impl Shader {
             shader_type: shader_type,
         }
     }
+
     pub fn compile(self) -> Vec<u8> {
-        glsl_to_spirv::compile(&self.code, self.shader_type)
-            .unwrap()
-            .bytes()
-            .map(|b| b.unwrap())
-            .collect()
+        glsl_to_spirv::compile(&self.code, self.shader_type).unwrap().bytes().map(|b| b.unwrap()).collect()
     }
 
     pub fn read(path: std::path::PathBuf) -> Shader {

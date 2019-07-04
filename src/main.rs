@@ -12,15 +12,13 @@ use gfx_backend_vulkan as backend;
 use gfx_hal::{
     adapter::PhysicalDevice,
     buffer,
-    command::{ClearColor, ClearValue},
     format::{Aspects, ChannelType, Format, Swizzle},
     image::{SubresourceRange, ViewKind},
-    memory,
     pass::Subpass,
     pool::CommandPoolCreateFlags,
     pso,
     pso::{
-        AttributeDesc, BlendState, ColorBlendDesc, ColorMask, DescriptorRangeDesc, Element,
+        AttributeDesc, BlendState, ColorBlendDesc, ColorMask, Element,
         EntryPoint, GraphicsPipelineDesc, GraphicsShaderSet, PipelineStage, Rasterizer, Rect,
         ShaderStageFlags, Viewport,
     },
@@ -223,7 +221,7 @@ fn main() {
     let physical_device = &device_state.physical_device;
     let memory_types = physical_device.memory_properties().memory_types;
 
-    let mut command_pool = unsafe {
+    let command_pool = unsafe {
         device.create_command_pool_typed(&device_state.queues, CommandPoolCreateFlags::empty())
     }
     .expect("Can't create command pool");
@@ -258,7 +256,7 @@ fn main() {
 
     let desc_set = unsafe { desc_pool.allocate_set(&set_layout) }.unwrap();
 
-    let uniform_buffer = unsafe {
+    let _uniform_buffer = unsafe {
         renderer::BufferState::<backend::Backend>::new(
             &device,
             &proj_matrix.0,
@@ -314,7 +312,7 @@ fn main() {
         unsafe { device.create_swapchain(&mut backend_state.surface, swap_config, None) }
             .expect("Could not create swapchain");
 
-    let (mut frame_images, mut framebuffers) = {
+    let (frame_images, framebuffers) = {
         let pairs = backbuffer
             .into_iter()
             .map(|image| unsafe {

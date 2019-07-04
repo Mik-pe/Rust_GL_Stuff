@@ -1,29 +1,14 @@
-#[cfg(feature = "dx12")]
-use gfx_backend_dx12 as back;
-#[cfg(not(any(
-  feature = "vulkan",
-  feature = "dx12",
-  feature = "metal",
-  feature = "gl"
-)))]
-use gfx_backend_empty as back;
-#[cfg(feature = "gl")]
-use gfx_backend_gl as back;
-#[cfg(feature = "vulkan")]
-use gfx_backend_vulkan as back;
-
 use gfx_hal::{
   format::Format,
-  image::{Access, Layout, SubresourceRange, ViewKind},
+  image::{Access, Layout},
   pass::{
-    Attachment, AttachmentLoadOp, AttachmentOps, AttachmentStoreOp, Subpass, SubpassDependency,
+    Attachment, AttachmentLoadOp, AttachmentOps, AttachmentStoreOp, SubpassDependency,
     SubpassDesc, SubpassRef,
   },
   pso::{
-    BlendState, ColorBlendDesc, ColorMask, EntryPoint, GraphicsPipelineDesc, GraphicsShaderSet,
-    PipelineStage, Rasterizer, Rect, Viewport,
+    PipelineStage,
   },
-  Adapter, Backend, Device, Limits, MemoryType, PhysicalDevice,
+  Backend, Device,
 };
 
 pub fn create_fullscreen_pass<B: Backend>(

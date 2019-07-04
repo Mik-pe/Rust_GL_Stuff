@@ -22,6 +22,7 @@ impl Vec4 {
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub fn add(_lhs: Vec4, _rhs: Vec4) -> Vec4 {
         Vec4([
             _lhs[0] + _rhs[0],

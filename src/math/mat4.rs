@@ -1,5 +1,5 @@
 use super::Vec4;
-use std::ops::{Index, IndexMut};
+use std::ops::{Index};
 
 #[derive(Debug)]
 pub struct Mat4(pub [Vec4; 4]);
@@ -99,6 +99,7 @@ impl Mat4 {
         ])
     }
 
+    #[allow(dead_code)]
     pub fn identity() -> Mat4 {
         Mat4([
             Vec4([1.0, 0.0, 0.0, 0.0]),

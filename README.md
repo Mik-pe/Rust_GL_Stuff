@@ -11,7 +11,7 @@ While implementing I try to:
 
 Since I wrote this the first time I have changed my mind.
 New goals:
-- Implement towards gfx_rust
+- Implement towards gfx-rs
 - The current goal is oriented towards a particle system
   - The goal itself is not the particle system, but rather I use the particle system as an excuse of learning the language.
   

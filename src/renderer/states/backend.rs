@@ -12,11 +12,11 @@ use gfx_backend_dx12 as back;
 use gfx_backend_empty as back;
 #[cfg(feature = "gl")]
 use gfx_backend_gl as back;
+
 #[cfg(feature = "vulkan")]
 use gfx_backend_vulkan as back;
 
 use gfx_hal::{
-    format::{AsFormat, Aspects, ChannelType, Format, Rgba8Srgb as ColorFormat},
     Backend, Instance,
 };
 

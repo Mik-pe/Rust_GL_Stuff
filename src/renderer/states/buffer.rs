@@ -1,6 +1,7 @@
 use gfx_hal::{buffer, memory, Backend, Device, MemoryType};
 use std::mem::size_of;
 
+#[allow(dead_code)]
 pub struct BufferState<B: Backend> {
     memory: Option<B::Memory>,
     buffer: Option<B::Buffer>,
@@ -8,6 +9,7 @@ pub struct BufferState<B: Backend> {
 }
 
 impl<B: Backend> BufferState<B> {
+    #[allow(dead_code)]
     fn get_buffer(&self) -> &B::Buffer {
         self.buffer.as_ref().unwrap()
     }
@@ -70,6 +72,7 @@ impl<B: Backend> BufferState<B> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn update_data<T>(&mut self, offset: u64, data_source: &[T], device: &B::Device)
     where
         T: Copy,

@@ -1,4 +1,5 @@
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct Quat(pub [f32; 4]);
 
 impl std::ops::Index<usize> for Quat {
@@ -15,6 +16,7 @@ impl std::ops::Index<usize> for Quat {
 }
 impl Quat {
     #[inline]
+    #[allow(dead_code)]
     pub fn new() -> Quat {
         Quat([0.0, 0.0, 0.0, 1.0])
     }
