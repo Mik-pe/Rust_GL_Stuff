@@ -1,5 +1,8 @@
-use gfx_hal::{buffer, memory, Backend, Device, MemoryType};
+use gfx_hal::adapter::MemoryType;
+use gfx_hal::device::Device;
+use gfx_hal::{buffer, memory, Backend};
 use std::mem::size_of;
+use std::ptr;
 
 #[allow(dead_code)]
 pub struct BufferState<B: Backend> {
@@ -16,7 +19,7 @@ impl<B: Backend> BufferState<B> {
 
     pub unsafe fn new<T>(
         device: &B::Device,
-        data_source: &[T],
+        data_source: &[u8],
         usage: buffer::Usage,
         memory_types: &[MemoryType],
     ) -> Self
@@ -57,11 +60,13 @@ impl<B: Backend> BufferState<B> {
 
             // TODO: check transitions: read/write mapping and vertex buffer read
             {
-                let mut data_target = device
-                    .acquire_mapping_writer::<T>(&memory, 0..size)
-                    .unwrap();
-                data_target[0..data_source.len()].copy_from_slice(data_source);
-                device.release_mapping_writer(data_target).unwrap();
+                let data_mapping = device.map_memory(&memory, 0..size).unwrap();
+                ptr::copy_nonoverlapping(
+                    data_source.as_ptr(),
+                    data_mapping.offset(0 as isize),
+                    data_source.len(),
+                );
+                device.unmap_memory(&memory);
             }
         }
 
@@ -73,7 +78,7 @@ impl<B: Backend> BufferState<B> {
     }
 
     #[allow(dead_code)]
-    pub fn update_data<T>(&mut self, offset: u64, data_source: &[T], device: &B::Device)
+    pub fn update_data<T>(&mut self, offset: u64, data_source: &[u8], device: &B::Device)
     where
         T: Copy,
     {
@@ -83,11 +88,15 @@ impl<B: Backend> BufferState<B> {
         assert!(offset + upload_size <= self.size);
 
         unsafe {
-            let mut data_target = device
-                .acquire_mapping_writer::<T>(self.memory.as_ref().unwrap(), offset..self.size)
+            let mut data_mapping = device
+                .map_memory(&self.memory.as_ref().unwrap(), offset..self.size)
                 .unwrap();
-            data_target[0..data_source.len()].copy_from_slice(data_source);
-            device.release_mapping_writer(data_target).unwrap();
+            ptr::copy_nonoverlapping(
+                data_source.as_ptr(),
+                data_mapping.offset(0 as isize),
+                data_source.len(),
+            );
+            device.unmap_memory(&self.memory.as_ref().unwrap());
         }
     }
 }
