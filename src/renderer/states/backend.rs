@@ -16,9 +16,7 @@ use gfx_backend_gl as back;
 #[cfg(feature = "vulkan")]
 use gfx_backend_vulkan as back;
 
-use gfx_hal::{
-    Backend, Instance,
-};
+use gfx_hal::{Backend, Instance};
 
 pub struct BackendState<B: Backend> {
     pub surface: B::Surface,
@@ -41,8 +39,13 @@ pub fn create_backend(
         .unwrap()
         .build(&window_state.events_loop)
         .unwrap();
-    let instance = back::Instance::create("Graphics instance", 1);
-    let surface = instance.create_surface(&window);
+    let instance =
+        back::Instance::create("Graphics instance", 1).expect("Could not create instance!");
+    let surface = unsafe {
+        instance
+            .create_surface(&window)
+            .expect("Could not create a surface!")
+    };
     let mut adapters = instance.enumerate_adapters();
     (
         BackendState { surface, window },

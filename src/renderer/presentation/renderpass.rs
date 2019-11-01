@@ -1,14 +1,14 @@
 use gfx_hal::{
+  device::Device,
   format::Format,
   image::{Access, Layout},
+  memory::Dependencies,
   pass::{
-    Attachment, AttachmentLoadOp, AttachmentOps, AttachmentStoreOp, SubpassDependency,
-    SubpassDesc, SubpassRef,
+    Attachment, AttachmentLoadOp, AttachmentOps, AttachmentStoreOp, SubpassDependency, SubpassDesc,
+    SubpassRef,
   },
-  pso::{
-    PipelineStage,
-  },
-  Backend, Device,
+  pso::PipelineStage,
+  Backend,
 };
 
 pub fn create_fullscreen_pass<B: Backend>(
@@ -39,6 +39,7 @@ pub fn create_fullscreen_pass<B: Backend>(
       passes: SubpassRef::External..SubpassRef::Pass(0),
       stages: PipelineStage::COLOR_ATTACHMENT_OUTPUT..PipelineStage::COLOR_ATTACHMENT_OUTPUT,
       accesses: Access::empty()..(Access::COLOR_ATTACHMENT_READ | Access::COLOR_ATTACHMENT_WRITE),
+      flags: Dependencies::BY_REGION,
     };
 
     unsafe { device.create_render_pass(&[color_attachment], &[subpass], &[dependency]) }

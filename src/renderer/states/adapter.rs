@@ -1,4 +1,5 @@
-use gfx_hal::{Adapter, Backend, Limits, MemoryType, PhysicalDevice};
+use gfx_hal::adapter::{Adapter, MemoryType, PhysicalDevice};
+use gfx_hal::{Backend, Limits};
 
 pub struct AdapterState<B: Backend> {
     pub adapter: Option<Adapter<B>>,
@@ -8,11 +9,6 @@ pub struct AdapterState<B: Backend> {
 
 impl<B: Backend> AdapterState<B> {
     pub fn new(adapters: &mut Vec<Adapter<B>>) -> Self {
-        // print!("Found adapters: ");
-
-        // for adapter in adapters.iter() {
-        //     println!("{:?}", adapter.info);
-        // }
         AdapterState::<B>::new_adapter(adapters.remove(0))
     }
 

@@ -12,19 +12,20 @@ use gfx_backend_vulkan as backend;
 use gfx_hal::{
     adapter::PhysicalDevice,
     buffer,
+    device::Device,
     format::{Aspects, ChannelType, Format, Swizzle},
     image::{SubresourceRange, ViewKind},
     pass::Subpass,
     pool::CommandPoolCreateFlags,
     pso,
     pso::{
-        AttributeDesc, BlendState, ColorBlendDesc, ColorMask, Element,
-        EntryPoint, GraphicsPipelineDesc, GraphicsShaderSet, PipelineStage, Rasterizer, Rect,
-        ShaderStageFlags, Viewport,
+        AttributeDesc, BlendState, ColorBlendDesc, ColorMask, Element, EntryPoint,
+        GraphicsPipelineDesc, GraphicsShaderSet, PipelineStage, Rasterizer, Rect, ShaderStageFlags,
+        Viewport,
     },
     queue::Submission,
     window::Extent2D,
-    Backend, DescriptorPool, Device, Primitive, Surface, Swapchain, SwapchainConfig,
+    Backend, DescriptorPool, Primitive, Surface, Swapchain, SwapchainConfig,
 };
 use glsl_to_spirv::ShaderType;
 use winit::{Event, KeyboardInput, VirtualKeyCode, WindowEvent};
@@ -190,7 +191,6 @@ fn main() {
 
     let mut proj_matrix = math::Mat4::create_ortho(-top, top, -right, right, 0.1, 1000.0);
     //TODO MATH STUFF
-
     let (tx, rx) = channel();
 
     let mut current_path = env::current_exe().unwrap();
