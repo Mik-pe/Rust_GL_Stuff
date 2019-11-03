@@ -1,5 +1,5 @@
 use super::Vec4;
-use std::ops::{Index};
+use std::ops::Index;
 
 #[derive(Debug)]
 pub struct Mat4(pub [Vec4; 4]);

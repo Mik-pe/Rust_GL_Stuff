@@ -11,21 +11,23 @@ use gfx_backend_vulkan as backend;
 
 use gfx_hal::{
     adapter::PhysicalDevice,
-    buffer,
+    buffer, command,
+    command::{ClearColor, ClearValue},
     device::Device,
     format::{Aspects, ChannelType, Format, Swizzle},
     image::{SubresourceRange, ViewKind},
     pass::Subpass,
     pool::CommandPoolCreateFlags,
-    pso,
+    prelude::*,
     pso::{
-        AttributeDesc, BlendState, ColorBlendDesc, ColorMask, Element, EntryPoint,
-        GraphicsPipelineDesc, GraphicsShaderSet, PipelineStage, Rasterizer, Rect, ShaderStageFlags,
-        Viewport,
+        AttributeDesc, BlendState, ColorBlendDesc, ColorMask, DescriptorPoolCreateFlags,
+        DescriptorRangeDesc, DescriptorSetLayoutBinding, DescriptorType, Element, EntryPoint,
+        GraphicsPipelineDesc, GraphicsShaderSet, PipelineStage, Primitive, Rasterizer, Rect,
+        ShaderStageFlags, Viewport,
     },
-    queue::Submission,
-    window::Extent2D,
-    Backend, DescriptorPool, Primitive, Surface, Swapchain, SwapchainConfig,
+    queue::{QueueGroup, Submission},
+    window::{Extent2D, SwapImageIndex, Swapchain, SwapchainConfig},
+    Backend,
 };
 use glsl_to_spirv::ShaderType;
 use winit::{Event, KeyboardInput, VirtualKeyCode, WindowEvent};
@@ -33,6 +35,8 @@ use winit::{Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use std::cell::RefCell;
 use std::env;
+use std::mem::transmute;
+use std::ptr;
 use std::sync::mpsc::channel;
 use std::thread;
 use std::time::{Duration, SystemTime};
@@ -57,7 +61,7 @@ fn watch(path: std::path::PathBuf, sender: std::sync::mpsc::Sender<notify::Debou
     }
 }
 
-fn run_shader_code(path: &std::path::PathBuf) -> (Vec<u8>, Vec<u8>) {
+fn run_shader_code(path: &std::path::PathBuf) -> (Vec<u32>, Vec<u32>) {
     let mut shader_list: Vec<renderer::Shader> = Vec::new();
     if path.is_dir() {
         for entry in path.read_dir().expect("Read path failed!") {
@@ -92,18 +96,18 @@ struct PipelineState<B: Backend> {
 
 //TODO: move this func?
 unsafe fn reset_pipeline<B: Backend>(
-    vert_spirv: Vec<u8>,
-    frag_spirv: Vec<u8>,
+    vert_spirv: Vec<u32>,
+    frag_spirv: Vec<u32>,
     pipeline_layout: &B::PipelineLayout,
     device: &B::Device,
     render_pass: &B::RenderPass,
 ) -> B::GraphicsPipeline {
     let vertex_shader_module = device
-        .create_shader_module(&vert_spirv)
+        .create_shader_module(vert_spirv.as_slice())
         .expect("Could not create vertex shader module");
 
     let fragment_shader_module = device
-        .create_shader_module(&frag_spirv)
+        .create_shader_module(frag_spirv.as_slice())
         .expect("Could not create fragment shader module");
 
     // A pipeline object encodes almost all the state you need in order to draw
@@ -142,10 +146,10 @@ unsafe fn reset_pipeline<B: Backend>(
         subpass,
     );
 
-    pipeline_desc
-        .blender
-        .targets
-        .push(ColorBlendDesc(ColorMask::ALL, BlendState::ALPHA));
+    pipeline_desc.blender.targets.push(ColorBlendDesc {
+        mask: ColorMask::ALL,
+        blend: Some(BlendState::ALPHA),
+    });
     //TODO: Fix pipeline vertex attribs
 
     pipeline_desc
@@ -221,17 +225,18 @@ fn main() {
     let physical_device = &device_state.physical_device;
     let memory_types = physical_device.memory_properties().memory_types;
 
-    let command_pool = unsafe {
-        device.create_command_pool_typed(&device_state.queues, CommandPoolCreateFlags::empty())
-    }
-    .expect("Can't create command pool");
+    let mut command_pool = unsafe {
+        device
+            .create_command_pool(device_state.queues.family, CommandPoolCreateFlags::empty())
+            .expect("Could not create command pool")
+    };
 
     // Setup renderpass and pipeline
     let set_layout = unsafe {
         device.create_descriptor_set_layout(
-            &[pso::DescriptorSetLayoutBinding {
+            &[DescriptorSetLayoutBinding {
                 binding: 0,
-                ty: pso::DescriptorType::UniformBuffer,
+                ty: DescriptorType::UniformBuffer,
                 count: 1,
                 stage_flags: ShaderStageFlags::VERTEX,
                 immutable_samplers: false,
@@ -245,28 +250,30 @@ fn main() {
     let mut desc_pool = unsafe {
         device.create_descriptor_pool(
             1, // sets
-            &[pso::DescriptorRangeDesc {
-                ty: pso::DescriptorType::UniformBuffer,
+            &[DescriptorRangeDesc {
+                ty: DescriptorType::UniformBuffer,
                 count: 1,
             }],
-            pso::DescriptorPoolCreateFlags::empty(),
+            DescriptorPoolCreateFlags::empty(),
         )
     }
     .expect("Can't create descriptor pool");
 
     let desc_set = unsafe { desc_pool.allocate_set(&set_layout) }.unwrap();
 
-    let _uniform_buffer = unsafe {
-        renderer::BufferState::<backend::Backend>::new(
-            &device,
-            &proj_matrix.0,
-            gfx_hal::buffer::Usage::UNIFORM,
-            &adapter_state.memory_types,
-        )
-    };
+    // let _uniform_buffer = unsafe {
+    //     let mat_bytes = transmute::<[math::Vec4; 4], [u8; 16 * 4]>(proj_matrix.0);
+    //     renderer::BufferState::<backend::Backend>::new(
+    //         &device,
+    //         &mat_bytes,
+    //         gfx_hal::buffer::Usage::UNIFORM,
+    //         &adapter_state.memory_types,
+    //     )
+    // };
 
     let queue_group = &mut device_state.queues;
-    let (caps, formats, _) = backend_state.surface.compatibility(physical_device);
+    let caps = backend_state.surface.capabilities(physical_device);
+    let formats = backend_state.surface.supported_formats(&physical_device);
 
     let surface_color_format = {
         // We must pick a color format from the list of supported formats. If there
@@ -355,13 +362,22 @@ fn main() {
     let mut cmd_pools = Vec::with_capacity(frames_in_flight);
     let mut cmd_buffers = Vec::with_capacity(frames_in_flight);
 
+    //TODO: Allocate our command_buffers and make sure we can record our commands to them.
+    let mut cmd_buffer = unsafe {
+        match cmd_buffers.pop() {
+            Some(cmd_buffer) => cmd_buffer,
+            None => command_pool.allocate_one(command::Level::Primary),
+        }
+    };
+    // cmd_buffer.begin_primary(command::CommandBufferFlags::ONE_TIME_SUBMIT);
+
     cmd_pools.push(command_pool);
     for _ in 1..frames_in_flight {
         unsafe {
             cmd_pools.push(
                 device
-                    .create_command_pool_typed(
-                        &queue_group,
+                    .create_command_pool(
+                        queue_group.family,
                         gfx_hal::pool::CommandPoolCreateFlags::empty(),
                     )
                     .expect("Can't create command pool"),
@@ -388,7 +404,8 @@ fn main() {
                 .create_fence(true)
                 .expect("Could not create semaphore"),
         );
-        cmd_buffers.push(cmd_pools[i].acquire_command_buffer::<gfx_hal::command::MultiShot>());
+        // cmd_buffers.push(cmd_buffer);
+        // cmd_buffers.push(cmd_pools[i].acquire_command_buffer::<gfx_hal::command::MultiShot>());
     }
     let scale = 5.0;
     let triangle: [math::Vec3; 3] = [
@@ -483,11 +500,27 @@ fn main() {
         }
         // TODO: check transitions: read/write mapping and vertex buffer read
         unsafe {
-            let mut vertices = device
-                .acquire_mapping_writer::<math::Vec3>(&buffer_memory, 0..buffer_req.size)
+            //TODO: use the Buffer struct for this
+
+            // let mut dst = device
+            //     .bind_buffer_memory(&buffer_memory, 0, &mut vertex_buffer)
+            //     .unwrap();
+            let mut dst = device
+                .map_memory(&buffer_memory, 0..buffer_req.size)
                 .unwrap();
-            vertices[0..some_triangles.len()].copy_from_slice(&some_triangles);
-            device.release_mapping_writer(vertices).unwrap();
+
+            let src = some_triangles.as_ptr(); //<-- data source
+            ptr::copy_nonoverlapping(
+                src as *const u8,
+                dst.offset(0 as isize),
+                some_triangles.len(),
+            );
+
+            // let mut vertices = device
+            //     .acquire_mapping_writer::<math::Vec3>(&buffer_memory, 0..buffer_req.size)
+            //     .unwrap();
+            // vertices[0..some_triangles.len()].copy_from_slice(&some_triangles);
+            // device.release_mapping_writer(vertices).unwrap();
         }
 
         //TODO: Move this:
@@ -572,12 +605,12 @@ fn main() {
             device
                 .reset_fence(&submission_complete_fences[frame_idx])
                 .expect("Failed to reset fence");
-            cmd_pools[frame_idx].reset();
+            cmd_pools[frame_idx].reset(false);
         }
         // Rendering
         let cmd_buffer = &mut cmd_buffers[frame_idx];
         unsafe {
-            cmd_buffer.begin(false);
+            cmd_buffer.begin_primary(command::CommandBufferFlags::ONE_TIME_SUBMIT);
 
             cmd_buffer.set_viewports(0, &[viewport.clone()]);
             cmd_buffer.set_scissors(0, &[viewport.rect]);
@@ -588,15 +621,18 @@ fn main() {
             cmd_buffer.bind_graphics_descriptor_sets(&pipeline_layout, 0, Some(&desc_set), &[]);
 
             {
-                let mut encoder = cmd_buffer.begin_render_pass_inline(
+                let mut encoder = cmd_buffer.begin_render_pass(
                     &fullscreen_pass,
                     &framebuffers[swap_image],
                     viewport.rect,
-                    &[gfx_hal::command::ClearValue::Color(
-                        gfx_hal::command::ClearColor::Float([0.0, 0.0, 0.0, 1.0]),
-                    )],
+                    &[ClearValue {
+                        color: ClearColor {
+                            float32: [0.0, 0.0, 0.0, 1.0],
+                        },
+                    }],
+                    command::SubpassContents::Inline,
                 );
-                encoder.draw(0..some_triangles.len() as u32, 0..1);
+                cmd_buffer.draw(0..some_triangles.len() as u32, 0..1);
             }
 
             cmd_buffer.finish();
@@ -614,7 +650,7 @@ fn main() {
             // present frame
             if let Err(_) = swapchain.present(
                 &mut queue_group.queues[0],
-                swap_image as gfx_hal::SwapImageIndex,
+                swap_image as SwapImageIndex,
                 Some(&submission_complete_semaphores[frame_idx]),
             ) {
                 _recreate_swapchain = true;
@@ -626,7 +662,7 @@ fn main() {
     device.wait_idle().unwrap();
     unsafe {
         for pool in cmd_pools {
-            device.destroy_command_pool(pool.into_raw());
+            device.destroy_command_pool(pool);
         }
 
         device.destroy_render_pass(fullscreen_pass);

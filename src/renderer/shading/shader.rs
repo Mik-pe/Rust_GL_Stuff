@@ -1,3 +1,4 @@
+use gfx_hal::pso;
 use glsl_to_spirv::ShaderType;
 use std::fs::File;
 use std::io::prelude::*;
@@ -15,8 +16,10 @@ impl Shader {
         }
     }
 
-    pub fn compile(self) -> Vec<u8> {
-        glsl_to_spirv::compile(&self.code, self.shader_type).unwrap().bytes().map(|b| b.unwrap()).collect()
+    pub fn compile(self) -> Vec<u32> {
+        let file = glsl_to_spirv::compile(&self.code, self.shader_type).unwrap();
+        let spirv: Vec<u32> = pso::read_spirv(file).unwrap();
+        spirv
     }
 
     pub fn read(path: std::path::PathBuf) -> Shader {

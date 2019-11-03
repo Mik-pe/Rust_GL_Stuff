@@ -14,7 +14,7 @@ gfx-backend-empty = "*"
 glsl-to-spirv = "*"
 
 [features]
-default = ["dx12"]
+# default = ["dx12"]
 gl = ["gfx-backend-gl"]
 vulkan = ["gfx-backend-vulkan"]
 dx12 = ["gfx-backend-dx12"]
