@@ -363,12 +363,12 @@ fn main() {
     let mut cmd_buffers = Vec::with_capacity(frames_in_flight);
 
     //TODO: Allocate our command_buffers and make sure we can record our commands to them.
-    let mut cmd_buffer = unsafe {
-        match cmd_buffers.pop() {
-            Some(cmd_buffer) => cmd_buffer,
-            None => command_pool.allocate_one(command::Level::Primary),
+    for _ in 0..frames_in_flight {
+        unsafe {
+            cmd_buffers.push(command_pool.allocate_one(command::Level::Primary));
         }
-    };
+    }
+    // cmd_buffers.push(cmd_buffer);
     // cmd_buffer.begin_primary(command::CommandBufferFlags::ONE_TIME_SUBMIT);
 
     cmd_pools.push(command_pool);
