@@ -363,27 +363,9 @@ fn main() {
     let mut cmd_buffers = Vec::with_capacity(frames_in_flight);
 
     //TODO: Allocate our command_buffers and make sure we can record our commands to them.
-    for _ in 0..frames_in_flight {
-        unsafe {
-            cmd_buffers.push(command_pool.allocate_one(command::Level::Primary));
-        }
-    }
+    for _ in 0..frames_in_flight {}
     // cmd_buffers.push(cmd_buffer);
     // cmd_buffer.begin_primary(command::CommandBufferFlags::ONE_TIME_SUBMIT);
-
-    cmd_pools.push(command_pool);
-    for _ in 1..frames_in_flight {
-        unsafe {
-            cmd_pools.push(
-                device
-                    .create_command_pool(
-                        queue_group.family,
-                        gfx_hal::pool::CommandPoolCreateFlags::empty(),
-                    )
-                    .expect("Can't create command pool"),
-            );
-        }
-    }
 
     for _ in 0..frame_images.len() {
         image_acquire_semaphores.push(
@@ -404,9 +386,21 @@ fn main() {
                 .create_fence(true)
                 .expect("Could not create semaphore"),
         );
-        // cmd_buffers.push(cmd_buffer);
-        // cmd_buffers.push(cmd_pools[i].acquire_command_buffer::<gfx_hal::command::MultiShot>());
+        unsafe {
+            cmd_pools.push(
+                device
+                    .create_command_pool(
+                        queue_group.family,
+                        gfx_hal::pool::CommandPoolCreateFlags::empty(),
+                    )
+                    .expect("Can't create command pool"),
+            );
+            unsafe {
+                cmd_buffers.push(command_pool.allocate_one(command::Level::Primary));
+            }
+        }
     }
+    cmd_pools.push(command_pool);
     let scale = 5.0;
     let triangle: [math::Vec3; 3] = [
         math::Vec3::new(0.0, scale * 1.0, 0.0),
