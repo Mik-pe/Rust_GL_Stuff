@@ -13,13 +13,15 @@ pub struct BufferState<B: Backend> {
 
 impl<B: Backend> BufferState<B> {
     #[allow(dead_code)]
-    fn get_buffer(&self) -> &B::Buffer {
+    pub fn get_buffer(&self) -> &B::Buffer {
         self.buffer.as_ref().unwrap()
     }
 
+    //TODO: implement data as generic Vec<T>?
     pub unsafe fn new<T>(
         device: &B::Device,
-        data_source: &[u8],
+        data_source: *const u8,
+        data_len: usize,
         usage: buffer::Usage,
         memory_types: &[MemoryType],
     ) -> Self
@@ -31,7 +33,7 @@ impl<B: Backend> BufferState<B> {
         let size: u64;
 
         let stride = size_of::<T>() as u64;
-        let upload_size = data_source.len() as u64 * stride;
+        let upload_size = data_len as u64 * stride;
 
         {
             buffer = device.create_buffer(upload_size, usage).unwrap();
@@ -61,11 +63,7 @@ impl<B: Backend> BufferState<B> {
             // TODO: check transitions: read/write mapping and vertex buffer read
             {
                 let data_mapping = device.map_memory(&memory, 0..size).unwrap();
-                ptr::copy_nonoverlapping(
-                    data_source.as_ptr(),
-                    data_mapping.offset(0 as isize),
-                    data_source.len(),
-                );
+                ptr::copy_nonoverlapping(data_source, data_mapping.offset(0 as isize), data_len);
                 device.unmap_memory(&memory);
             }
         }
@@ -78,24 +76,25 @@ impl<B: Backend> BufferState<B> {
     }
 
     #[allow(dead_code)]
-    pub fn update_data<T>(&mut self, offset: u64, data_source: &[u8], device: &B::Device)
-    where
+    pub fn update_data<T>(
+        &mut self,
+        offset: u64,
+        data_source: *const u8,
+        data_len: usize,
+        device: &B::Device,
+    ) where
         T: Copy,
     {
         let stride = size_of::<T>() as u64;
-        let upload_size = data_source.len() as u64 * stride;
+        let upload_size = data_len as u64 * stride;
 
         assert!(offset + upload_size <= self.size);
 
         unsafe {
-            let mut data_mapping = device
+            let data_mapping = device
                 .map_memory(&self.memory.as_ref().unwrap(), offset..self.size)
                 .unwrap();
-            ptr::copy_nonoverlapping(
-                data_source.as_ptr(),
-                data_mapping.offset(0 as isize),
-                data_source.len(),
-            );
+            ptr::copy_nonoverlapping(data_source, data_mapping.offset(0 as isize), data_len);
             device.unmap_memory(&self.memory.as_ref().unwrap());
         }
     }

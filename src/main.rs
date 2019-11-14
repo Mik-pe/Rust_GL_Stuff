@@ -25,7 +25,7 @@ use gfx_hal::{
         GraphicsPipelineDesc, GraphicsShaderSet, PipelineStage, Primitive, Rasterizer, Rect,
         ShaderStageFlags, Viewport,
     },
-    queue::{QueueGroup, Submission},
+    queue::Submission,
     window::{Extent2D, SwapImageIndex, Swapchain, SwapchainConfig},
     Backend,
 };
@@ -35,7 +35,6 @@ use winit::{Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use std::cell::RefCell;
 use std::env;
-use std::mem::transmute;
 use std::ptr;
 use std::sync::mpsc::channel;
 use std::thread;
@@ -94,7 +93,7 @@ struct PipelineState<B: Backend> {
     device: std::rc::Rc<RefCell<renderer::DeviceState<B>>>,
 }
 
-//TODO: move this func?
+//TODO: move this func to renderer/shader?
 unsafe fn reset_pipeline<B: Backend>(
     vert_spirv: Vec<u32>,
     frag_spirv: Vec<u32>,
@@ -261,6 +260,7 @@ fn main() {
 
     let desc_set = unsafe { desc_pool.allocate_set(&set_layout) }.unwrap();
 
+    //TODO: implement some matrix value or whatever:
     // let _uniform_buffer = unsafe {
     //     let mat_bytes = transmute::<[math::Vec4; 4], [u8; 16 * 4]>(proj_matrix.0);
     //     renderer::BufferState::<backend::Backend>::new(
@@ -358,14 +358,7 @@ fn main() {
     // The number of the rest of the resources is based on the frames in flight.
     let mut submission_complete_semaphores = Vec::with_capacity(frames_in_flight);
     let mut submission_complete_fences = Vec::with_capacity(frames_in_flight);
-    // Note: We don't really need a different command pool per frame in such a simple demo like this,
-    let mut cmd_pools = Vec::with_capacity(frames_in_flight);
     let mut cmd_buffers = Vec::with_capacity(frames_in_flight);
-
-    //TODO: Allocate our command_buffers and make sure we can record our commands to them.
-    for _ in 0..frames_in_flight {}
-    // cmd_buffers.push(cmd_buffer);
-    // cmd_buffer.begin_primary(command::CommandBufferFlags::ONE_TIME_SUBMIT);
 
     for _ in 0..frame_images.len() {
         image_acquire_semaphores.push(
@@ -375,7 +368,7 @@ fn main() {
         );
     }
 
-    for i in 0..frames_in_flight {
+    for _ in 0..frames_in_flight {
         submission_complete_semaphores.push(
             device
                 .create_semaphore()
@@ -387,20 +380,9 @@ fn main() {
                 .expect("Could not create semaphore"),
         );
         unsafe {
-            cmd_pools.push(
-                device
-                    .create_command_pool(
-                        queue_group.family,
-                        gfx_hal::pool::CommandPoolCreateFlags::empty(),
-                    )
-                    .expect("Can't create command pool"),
-            );
-            unsafe {
-                cmd_buffers.push(command_pool.allocate_one(command::Level::Primary));
-            }
+            cmd_buffers.push(command_pool.allocate_one(command::Level::Primary));
         }
     }
-    cmd_pools.push(command_pool);
     let scale = 5.0;
     let triangle: [math::Vec3; 3] = [
         math::Vec3::new(0.0, scale * 1.0, 0.0),
@@ -418,30 +400,15 @@ fn main() {
         some_triangles.push(pos.add(&triangle[2]));
     }
 
-    let buffer_stride = std::mem::size_of::<math::Vec3>() as u64;
-    let buffer_len = some_triangles.len() as u64 * buffer_stride;
-    let mut vertex_buffer =
-        unsafe { device.create_buffer(buffer_len, buffer::Usage::VERTEX) }.unwrap();
-
-    let buffer_req = unsafe { device.get_buffer_requirements(&vertex_buffer) };
-
-    let upload_type = memory_types
-        .iter()
-        .enumerate()
-        .position(|(id, mem_type)| {
-            // type_mask is a bit field where each bit represents a memory type. If the bit is set
-            // to 1 it means we can use that type for our buffer. So this code finds the first
-            // memory type that has a `1` (or, is allowed), and is visible to the CPU.
-            buffer_req.type_mask & (1 << id) != 0
-                && mem_type
-                    .properties
-                    .contains(gfx_hal::memory::Properties::CPU_VISIBLE)
-        })
-        .unwrap()
-        .into();
-
-    let buffer_memory = unsafe { device.allocate_memory(upload_type, buffer_req.size) }.unwrap();
-    unsafe { device.bind_buffer_memory(&buffer_memory, 0, &mut vertex_buffer) }.unwrap();
+    let mut vert_buf = unsafe {
+        renderer::BufferState::<backend::Backend>::new::<math::Vec3>(
+            &device,
+            some_triangles.as_ptr() as *const u8,
+            some_triangles.len(),
+            buffer::Usage::VERTEX,
+            &memory_types,
+        )
+    };
 
     let mut _recreate_swapchain = false;
     let mut quitting = false;
@@ -493,31 +460,15 @@ fn main() {
             ));
         }
         // TODO: check transitions: read/write mapping and vertex buffer read
-        unsafe {
-            //TODO: use the Buffer struct for this
 
-            // let mut dst = device
-            //     .bind_buffer_memory(&buffer_memory, 0, &mut vertex_buffer)
-            //     .unwrap();
-            let mut dst = device
-                .map_memory(&buffer_memory, 0..buffer_req.size)
-                .unwrap();
+        vert_buf.update_data::<math::Vec3>(
+            0,
+            some_triangles.as_ptr() as *const u8,
+            some_triangles.len(),
+            &device,
+        );
 
-            let src = some_triangles.as_ptr(); //<-- data source
-            ptr::copy_nonoverlapping(
-                src as *const u8,
-                dst.offset(0 as isize),
-                some_triangles.len(),
-            );
-
-            // let mut vertices = device
-            //     .acquire_mapping_writer::<math::Vec3>(&buffer_memory, 0..buffer_req.size)
-            //     .unwrap();
-            // vertices[0..some_triangles.len()].copy_from_slice(&some_triangles);
-            // device.release_mapping_writer(vertices).unwrap();
-        }
-
-        //TODO: Move this:
+        //TODO: Move this to filewatcher code:
         match rx.try_recv() {
             Ok(event) => match event {
                 notify::DebouncedEvent::Write(_watched_path) => {
@@ -567,7 +518,7 @@ fn main() {
         });
         // Start rendering
         if quitting == true {
-            println!("Should quit!");
+            println!("Goodbye!");
         }
 
         let swap_image = unsafe {
@@ -599,7 +550,6 @@ fn main() {
             device
                 .reset_fence(&submission_complete_fences[frame_idx])
                 .expect("Failed to reset fence");
-            cmd_pools[frame_idx].reset(false);
         }
         // Rendering
         let cmd_buffer = &mut cmd_buffers[frame_idx];
@@ -609,13 +559,14 @@ fn main() {
             cmd_buffer.set_viewports(0, &[viewport.clone()]);
             cmd_buffer.set_scissors(0, &[viewport.rect]);
             cmd_buffer.bind_graphics_pipeline(&pipeline);
-            cmd_buffer.bind_vertex_buffers(0, Some((&vertex_buffer, 0)));
+            // cmd_buffer.bind_vertex_buffers(0, Some((&vertex_buffer, 0)));
+            cmd_buffer.bind_vertex_buffers(0, Some((vert_buf.get_buffer(), 0)));
             //TODO: Fix descriptor sets:
             //Handle normalized viewspace coordinates better!
             cmd_buffer.bind_graphics_descriptor_sets(&pipeline_layout, 0, Some(&desc_set), &[]);
 
             {
-                let mut encoder = cmd_buffer.begin_render_pass(
+                let _encoder = cmd_buffer.begin_render_pass(
                     &fullscreen_pass,
                     &framebuffers[swap_image],
                     viewport.rect,
@@ -655,10 +606,6 @@ fn main() {
 
     device.wait_idle().unwrap();
     unsafe {
-        for pool in cmd_pools {
-            device.destroy_command_pool(pool);
-        }
-
         device.destroy_render_pass(fullscreen_pass);
         device.destroy_graphics_pipeline(pipeline);
         device.destroy_pipeline_layout(pipeline_layout);
