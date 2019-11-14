@@ -1,4 +1,4 @@
-mod pipeline;
+pub mod pipeline;
 mod shader;
 
 pub use self::shader::Shader;

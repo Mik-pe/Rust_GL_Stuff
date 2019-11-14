@@ -1,3 +1,4 @@
+mod filewatcher;
 mod math;
 mod particles;
 mod renderer;
@@ -13,7 +14,6 @@ use gfx_hal::{
     adapter::PhysicalDevice,
     buffer, command,
     command::{ClearColor, ClearValue},
-    device::Device,
     format::{Aspects, ChannelType, Format, Swizzle},
     image::{SubresourceRange, ViewKind},
     pass::Subpass,
@@ -26,39 +26,21 @@ use gfx_hal::{
         ShaderStageFlags, Viewport,
     },
     queue::Submission,
-    window::{Extent2D, SwapImageIndex, Swapchain, SwapchainConfig},
+    window::{Extent2D, SwapImageIndex, SwapchainConfig},
     Backend,
 };
 use glsl_to_spirv::ShaderType;
 use winit::{Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 
-use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use std::cell::RefCell;
 use std::env;
-use std::ptr;
-use std::sync::mpsc::channel;
-use std::thread;
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 
 const COLOR_RANGE: SubresourceRange = SubresourceRange {
     aspects: Aspects::COLOR,
     levels: 0..1,
     layers: 0..1,
 };
-
-fn watch(path: std::path::PathBuf, sender: std::sync::mpsc::Sender<notify::DebouncedEvent>) {
-    let (tx, rx) = channel();
-
-    let mut shader_watcher: RecommendedWatcher =
-        Watcher::new(tx, Duration::from_millis(50)).unwrap();
-    loop {
-        shader_watcher
-            .watch(path.clone(), RecursiveMode::Recursive)
-            .unwrap();
-        let event = rx.recv().unwrap();
-        sender.send(event).unwrap();
-    }
-}
 
 fn run_shader_code(path: &std::path::PathBuf) -> (Vec<u32>, Vec<u32>) {
     let mut shader_list: Vec<renderer::Shader> = Vec::new();
@@ -93,84 +75,6 @@ struct PipelineState<B: Backend> {
     device: std::rc::Rc<RefCell<renderer::DeviceState<B>>>,
 }
 
-//TODO: move this func to renderer/shader?
-unsafe fn reset_pipeline<B: Backend>(
-    vert_spirv: Vec<u32>,
-    frag_spirv: Vec<u32>,
-    pipeline_layout: &B::PipelineLayout,
-    device: &B::Device,
-    render_pass: &B::RenderPass,
-) -> B::GraphicsPipeline {
-    let vertex_shader_module = device
-        .create_shader_module(vert_spirv.as_slice())
-        .expect("Could not create vertex shader module");
-
-    let fragment_shader_module = device
-        .create_shader_module(frag_spirv.as_slice())
-        .expect("Could not create fragment shader module");
-
-    // A pipeline object encodes almost all the state you need in order to draw
-    // geometry on screen. For now that's really only which shaders to use, what
-    // kind of blending to do, and what kind of primitives to draw.
-    let vs_entry = EntryPoint::<B> {
-        entry: "main",
-        module: &vertex_shader_module,
-        specialization: Default::default(),
-    };
-
-    let fs_entry = EntryPoint::<B> {
-        entry: "main",
-        module: &fragment_shader_module,
-        specialization: Default::default(),
-    };
-
-    let shader_entries = GraphicsShaderSet {
-        vertex: vs_entry,
-        hull: None,
-        domain: None,
-        geometry: None,
-        fragment: Some(fs_entry),
-    };
-
-    let subpass = Subpass {
-        index: 0,
-        main_pass: render_pass,
-    };
-
-    let mut pipeline_desc = GraphicsPipelineDesc::new(
-        shader_entries,
-        Primitive::TriangleList,
-        Rasterizer::FILL,
-        &pipeline_layout,
-        subpass,
-    );
-
-    pipeline_desc.blender.targets.push(ColorBlendDesc {
-        mask: ColorMask::ALL,
-        blend: Some(BlendState::ALPHA),
-    });
-    //TODO: Fix pipeline vertex attribs
-
-    pipeline_desc
-        .vertex_buffers
-        .push(gfx_hal::pso::VertexBufferDesc {
-            binding: 0,
-            stride: std::mem::size_of::<math::Vec3>() as u32,
-            rate: gfx_hal::pso::VertexInputRate::Vertex,
-        });
-    pipeline_desc.attributes.push(AttributeDesc {
-        location: 0,
-        binding: 0,
-        element: Element {
-            format: gfx_hal::format::Format::Rgb32Sfloat,
-            offset: 0,
-        },
-    });
-    device
-        .create_graphics_pipeline(&pipeline_desc, None)
-        .expect("Could not create graphics pipeline.")
-}
-
 const WINDOW_DIMENSIONS: Extent2D = Extent2D {
     width: 640,
     height: 480,
@@ -194,16 +98,13 @@ fn main() {
 
     let mut proj_matrix = math::Mat4::create_ortho(-top, top, -right, right, 0.1, 1000.0);
     //TODO MATH STUFF
-    let (tx, rx) = channel();
 
     let mut current_path = env::current_exe().unwrap();
     current_path.pop();
-    let path = current_path.join("../../assets/shaders");
-    let (vert_spirv, frag_spirv) = run_shader_code(&path);
+    let shader_path = current_path.join("../../assets/shaders");
+    let (vert_spirv, frag_spirv) = run_shader_code(&shader_path);
 
-    let _child = thread::spawn(move || {
-        watch(path, tx.clone());
-    });
+    let rx = filewatcher::watch_path(shader_path);
 
     let mut window_state = renderer::WindowState::new(
         (
@@ -301,7 +202,7 @@ fn main() {
     // geometry on screen. For now that's really only which shaders to use, what
     // kind of blending to do, and what kind of primitives to draw.
     let mut pipeline = unsafe {
-        reset_pipeline::<backend::Backend>(
+        renderer::pipeline::reset_pipeline::<backend::Backend>(
             vert_spirv,
             frag_spirv,
             &pipeline_layout,
@@ -460,7 +361,6 @@ fn main() {
             ));
         }
         // TODO: check transitions: read/write mapping and vertex buffer read
-
         vert_buf.update_data::<math::Vec3>(
             0,
             some_triangles.as_ptr() as *const u8,
@@ -477,7 +377,7 @@ fn main() {
                     let path = current_path.join("../../assets/shaders");
                     let (vert_spirv, frag_spirv) = run_shader_code(&path);
                     pipeline = unsafe {
-                        reset_pipeline::<backend::Backend>(
+                        renderer::pipeline::reset_pipeline::<backend::Backend>(
                             vert_spirv,
                             frag_spirv,
                             &pipeline_layout,
@@ -559,7 +459,6 @@ fn main() {
             cmd_buffer.set_viewports(0, &[viewport.clone()]);
             cmd_buffer.set_scissors(0, &[viewport.rect]);
             cmd_buffer.bind_graphics_pipeline(&pipeline);
-            // cmd_buffer.bind_vertex_buffers(0, Some((&vertex_buffer, 0)));
             cmd_buffer.bind_vertex_buffers(0, Some((vert_buf.get_buffer(), 0)));
             //TODO: Fix descriptor sets:
             //Handle normalized viewspace coordinates better!
