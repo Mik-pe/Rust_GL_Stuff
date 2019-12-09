@@ -16,14 +16,11 @@ use gfx_hal::{
     command::{ClearColor, ClearValue},
     format::{Aspects, ChannelType, Format, Swizzle},
     image::{SubresourceRange, ViewKind},
-    pass::Subpass,
     pool::CommandPoolCreateFlags,
     prelude::*,
     pso::{
-        AttributeDesc, BlendState, ColorBlendDesc, ColorMask, DescriptorPoolCreateFlags,
-        DescriptorRangeDesc, DescriptorSetLayoutBinding, DescriptorType, Element, EntryPoint,
-        GraphicsPipelineDesc, GraphicsShaderSet, PipelineStage, Primitive, Rasterizer, Rect,
-        ShaderStageFlags, Viewport,
+        DescriptorPoolCreateFlags, DescriptorRangeDesc, DescriptorSetLayoutBinding, DescriptorType,
+        PipelineStage, Rect, ShaderStageFlags, Viewport,
     },
     queue::Submission,
     window::{Extent2D, SwapImageIndex, SwapchainConfig},
@@ -32,7 +29,6 @@ use gfx_hal::{
 use glsl_to_spirv::ShaderType;
 use winit::{Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 
-use std::cell::RefCell;
 use std::env;
 use std::time::SystemTime;
 
@@ -68,13 +64,20 @@ fn run_shader_code(path: &std::path::PathBuf) -> (Vec<u32>, Vec<u32>) {
     (vert_spirv, frag_spirv)
 }
 
-#[allow(dead_code)]
-struct PipelineState<B: Backend> {
-    pipeline: Option<B::GraphicsPipeline>,
-    pipeline_layout: Option<B::PipelineLayout>,
-    device: std::rc::Rc<RefCell<renderer::DeviceState<B>>>,
+struct Mesh {
+    positions: Vec<math::Vec3>,
+    colors: Vec<math::Vec3>,
+    indices: Vec<u32>,
 }
 
+// impl Mesh {
+//     fn draw<B>(&self, cmd_buf: &gfx_hal::command::CommandBuffer<B>)
+//     where
+//         B: Backend,
+//     {
+//         // cmd_buf.draw_indexed()
+//     }
+// }
 const WINDOW_DIMENSIONS: Extent2D = Extent2D {
     width: 640,
     height: 480,
@@ -162,15 +165,15 @@ fn main() {
     let desc_set = unsafe { desc_pool.allocate_set(&set_layout) }.unwrap();
 
     //TODO: implement some matrix value or whatever:
-    // let _uniform_buffer = unsafe {
-    //     let mat_bytes = transmute::<[math::Vec4; 4], [u8; 16 * 4]>(proj_matrix.0);
-    //     renderer::BufferState::<backend::Backend>::new(
-    //         &device,
-    //         &mat_bytes,
-    //         gfx_hal::buffer::Usage::UNIFORM,
-    //         &adapter_state.memory_types,
-    //     )
-    // };
+    let _uniform_buffer = unsafe {
+        renderer::BufferState::<backend::Backend>::new(
+            &device,
+            &proj_matrix.0,
+            16 * 4,
+            gfx_hal::buffer::Usage::UNIFORM,
+            &adapter_state.memory_types,
+        )
+    };
 
     let queue_group = &mut device_state.queues;
     let caps = backend_state.surface.capabilities(physical_device);
@@ -197,7 +200,7 @@ fn main() {
 
     //uniforms and push constants go here:
     let pipeline_layout = unsafe { device.create_pipeline_layout(&[], &[]) }
-        .expect("Coult not create pipeline layout");
+        .expect("Could not create pipeline layout");
     // A pipeline object encodes almost all the state you need in order to draw
     // geometry on screen. For now that's really only which shaders to use, what
     // kind of blending to do, and what kind of primitives to draw.
@@ -219,7 +222,6 @@ fn main() {
     let (mut swapchain, backbuffer) =
         unsafe { device.create_swapchain(&mut backend_state.surface, swap_config, None) }
             .expect("Could not create swapchain");
-
     let (frame_images, framebuffers) = {
         let pairs = backbuffer
             .into_iter()
@@ -304,7 +306,7 @@ fn main() {
     let mut vert_buf = unsafe {
         renderer::BufferState::<backend::Backend>::new::<math::Vec3>(
             &device,
-            some_triangles.as_ptr() as *const u8,
+            &some_triangles,
             some_triangles.len(),
             buffer::Usage::VERTEX,
             &memory_types,
@@ -455,14 +457,18 @@ fn main() {
         let cmd_buffer = &mut cmd_buffers[frame_idx];
         unsafe {
             cmd_buffer.begin_primary(command::CommandBufferFlags::ONE_TIME_SUBMIT);
-
             cmd_buffer.set_viewports(0, &[viewport.clone()]);
             cmd_buffer.set_scissors(0, &[viewport.rect]);
             cmd_buffer.bind_graphics_pipeline(&pipeline);
             cmd_buffer.bind_vertex_buffers(0, Some((vert_buf.get_buffer(), 0)));
             //TODO: Fix descriptor sets:
             //Handle normalized viewspace coordinates better!
-            cmd_buffer.bind_graphics_descriptor_sets(&pipeline_layout, 0, Some(&desc_set), &[]);
+            // cmd_buffer.bind_graphics_descriptor_sets(
+            //     &pipeline_layout,
+            //     0,
+            //     std::iter::once(&desc_set),
+            //     &[],
+            // );
 
             {
                 let _encoder = cmd_buffer.begin_render_pass(
@@ -480,7 +486,6 @@ fn main() {
             }
 
             cmd_buffer.finish();
-
             let submission = Submission {
                 command_buffers: Some(&*cmd_buffer),
                 wait_semaphores: Some((

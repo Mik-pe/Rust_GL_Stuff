@@ -9,6 +9,7 @@ use gfx_hal::{
     },
     Backend,
 };
+
 //TODO: Make a state-holder class, which later
 //also has this function:
 pub unsafe fn reset_pipeline<B: Backend>(

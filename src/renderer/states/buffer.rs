@@ -20,7 +20,7 @@ impl<B: Backend> BufferState<B> {
     //TODO: implement data as generic Vec<T>?
     pub unsafe fn new<T>(
         device: &B::Device,
-        data_source: *const u8,
+        data_source: &[T],
         data_len: usize,
         usage: buffer::Usage,
         memory_types: &[MemoryType],
@@ -34,7 +34,7 @@ impl<B: Backend> BufferState<B> {
 
         let stride = size_of::<T>() as u64;
         let upload_size = data_len as u64 * stride;
-
+        println!("Uploading size {}, got data_len: {}", upload_size, data_len);
         {
             buffer = device.create_buffer(upload_size, usage).unwrap();
             let mem_req = device.get_buffer_requirements(&buffer);
@@ -63,7 +63,11 @@ impl<B: Backend> BufferState<B> {
             // TODO: check transitions: read/write mapping and vertex buffer read
             {
                 let data_mapping = device.map_memory(&memory, 0..size).unwrap();
-                ptr::copy_nonoverlapping(data_source, data_mapping.offset(0 as isize), data_len);
+                ptr::copy_nonoverlapping(
+                    data_source.as_ptr() as *const u8,
+                    data_mapping.offset(0 as isize),
+                    data_len,
+                );
                 device.unmap_memory(&memory);
             }
         }
