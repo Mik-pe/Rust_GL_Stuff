@@ -68,7 +68,6 @@ pub unsafe fn reset_pipeline<B: Backend>(
         blend: Some(BlendState::ALPHA),
     });
     //TODO: Fix pipeline vertex attribs
-
     pipeline_desc
         .vertex_buffers
         .push(gfx_hal::pso::VertexBufferDesc {

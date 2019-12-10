@@ -34,7 +34,6 @@ impl<B: Backend> BufferState<B> {
 
         let stride = size_of::<T>() as u64;
         let upload_size = data_len as u64 * stride;
-        println!("Uploading size {}, got data_len: {}", upload_size, data_len);
         {
             buffer = device.create_buffer(upload_size, usage).unwrap();
             let mem_req = device.get_buffer_requirements(&buffer);

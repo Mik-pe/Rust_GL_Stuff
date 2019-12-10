@@ -24,7 +24,6 @@ use gfx_hal::{
     },
     queue::Submission,
     window::{Extent2D, SwapImageIndex, SwapchainConfig},
-    Backend,
 };
 use glsl_to_spirv::ShaderType;
 use winit::{Event, KeyboardInput, VirtualKeyCode, WindowEvent};
@@ -83,24 +82,19 @@ const WINDOW_DIMENSIONS: Extent2D = Extent2D {
     height: 480,
 };
 
+#[cfg(any(
+    feature = "vulkan",
+    feature = "dx11",
+    feature = "dx12",
+    feature = "metal",
+    feature = "gl"
+))]
 fn main() {
     //TODO MATH STUFF:
     let mut my_emitter = particles::Emitter::new(4000);
-    let some_vec = math::Vec3::new(0.0, 1.0, 2.0);
-    let some_other_vec = math::Vec3::new(0.0, 1.0, 2.0);
-    let some_third_vec = some_vec.add(&some_other_vec);
-    let some_vec4 = math::Vec4::from_xyz(0.0, 1.0, 5.0);
-    let some_mat4 = math::Mat4::from_translation([10.0, 5.0, 5.0]);
-    let some_other_mat4 = math::Mat4::from_translation([10.0, 0.0, 5.0]);
-    let third_mat4 = some_mat4.mul(&some_other_mat4);
-    let _multiplied_vec = math::mat4_mul_vec3(&third_mat4, &some_third_vec);
-    let _multiplied_vec4 = math::mat4_mul_vec4(&third_mat4, &some_vec4);
-    let mut _view_matrix = math::Mat4::new();
     let top = WINDOW_DIMENSIONS.height as f32 / 2.0;
     let right = WINDOW_DIMENSIONS.width as f32 / 2.0;
-
     let mut proj_matrix = math::Mat4::create_ortho(-top, top, -right, right, 0.1, 1000.0);
-    //TODO MATH STUFF
 
     let mut current_path = env::current_exe().unwrap();
     current_path.pop();
@@ -163,17 +157,26 @@ fn main() {
     .expect("Can't create descriptor pool");
 
     let desc_set = unsafe { desc_pool.allocate_set(&set_layout) }.unwrap();
-
-    //TODO: implement some matrix value or whatever:
+    // pso::DescriptorSetLayoutBinding
+    //TODO: use this buffer in the descriptorset
+    // Make helper functions for easier bindings of these:
     let _uniform_buffer = unsafe {
         renderer::BufferState::<backend::Backend>::new(
             &device,
             &proj_matrix.0,
-            16 * 4,
+            1,
             gfx_hal::buffer::Usage::UNIFORM,
             &adapter_state.memory_types,
         )
     };
+    let bindings = vec![gfx_hal::pso::DescriptorSetLayoutBinding {
+        binding: 0,
+        ty: gfx_hal::pso::DescriptorType::UniformBuffer,
+        count: 1,
+        stage_flags: gfx_hal::pso::ShaderStageFlags::VERTEX,
+        immutable_samplers: false,
+    }];
+    let desc_set_layout = unsafe { device.create_descriptor_set_layout(bindings, &[]).unwrap() };
 
     let queue_group = &mut device_state.queues;
     let caps = backend_state.surface.capabilities(physical_device);
@@ -523,4 +526,17 @@ fn main() {
     //How do we join our threads?
     //Just don't mind as the OS handles this! ...for now and forever, this is a hobby project, what do you expect?
     // child.join().unwrap();
+}
+
+#[cfg(not(any(
+    feature = "vulkan",
+    feature = "dx11",
+    feature = "dx12",
+    feature = "metal",
+    feature = "gl"
+)))]
+fn main() {
+    println!(
+        "You need to enable the native API feature (vulkan/metal) in order to run the example"
+    );
 }
